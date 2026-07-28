@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=380,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>钓鱼天气 · 共享钓点</title>
+<style>
+* { box-sizing:border-box; margin:0; padding:0; }
+body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; background:#F0F0F0; }
+.app-wrap { width:380px; margin:0 auto; background:#F0F0F0; overflow:hidden; border-radius:16px; border:0.5px solid rgba(0,0,0,0.15); }
+.app-header { background:linear-gradient(135deg, #2B6CB0 0%, #1A4A7A 100%); color:#fff; padding:14px 16px 18px; position:relative; }
+.app-header::after { content:""; position:absolute; bottom:-12px; left:0; right:0; height:24px; background:inherit; border-radius:0 0 50% 50%; }
+.header-top { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.header-city { font-size:13px; opacity:0.85; }
+.header-title { font-size:16px; font-weight:500; }
+.header-btn { background:rgba(255,255,255,0.18); border:none; color:#fff; border-radius:20px; padding:4px 12px; font-size:12px; cursor:pointer; font-family:inherit; }
+.header-btn.locating { opacity:0.6; pointer-events:none; }
+.refresh-btn { background:rgba(255,255,255,0.18); border:none; color:#fff; border-radius:50%; width:28px; height:28px; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.fish-selector { display:flex; gap:6px; overflow-x:auto; padding:8px 0 4px; -webkit-overflow-scrolling:touch; }
+.fish-selector::-webkit-scrollbar { display:none; }
+.fish-chip { flex:0 0 auto; padding:5px 12px; border-radius:20px; font-size:12px; border:1.5px solid transparent; cursor:pointer; white-space:nowrap; font-weight:400; background:#fff; color:#666; border-color:rgba(0,0,0,0.15); }
+.fish-chip.active { background:#4A90D9; color:#fff; border-color:#4A90D9; font-weight:500; }
+.add-chip { border:1.5px dashed #4A90D9 !important; background:#EBF3FC !important; color:#4A90D9 !important; width:34px !important; padding:5px 0 !important; text-align:center; font-size:16px !important; font-weight:bold; }
+.custom-chip-del { font-size:12px; margin-left:2px; opacity:0.5; cursor:pointer; font-weight:bold; }
+.index-card { background:#fff; border-radius:12px; margin:-6px 12px 10px; padding:18px 16px 14px; text-align:center; position:relative; z-index:1; border:0.5px solid rgba(0,0,0,0.15); }
+.idx-score { font-size:52px; font-weight:500; line-height:1; margin:4px 0 2px; }
+.idx-level { font-size:13px; font-weight:500; margin-bottom:8px; }
+.idx-fish { font-size:12px; color:#888; margin-bottom:10px; }
+.update-time { font-size:10px; color:rgba(255,255,255,0.6); }
+.weather-row { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin:0 12px 10px; }
+.w-item { background:#fff; border-radius:8px; padding:8px 4px; text-align:center; border:0.5px solid rgba(0,0,0,0.15); }
+.w-val { font-size:15px; font-weight:500; color:#333; }
+.w-label { font-size:10px; color:#999; margin-top:2px; }
+.detail-section { margin:0 12px 10px; background:#fff; border-radius:12px; padding:12px; border:0.5px solid rgba(0,0,0,0.15); }
+.detail-title { font-size:13px; font-weight:500; margin-bottom:10px; color:#333; }
+.bar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+.bar-label { font-size:11px; color:#888; width:28px; text-align:right; }
+.bar-track { flex:1; height:8px; background:#f0f0f0; border-radius:4px; overflow:hidden; }
+.bar-fill { height:100%; border-radius:4px; transition:width 0.6s; }
+.bar-score { font-size:11px; width:30px; color:#888; }
+.tab-bar { display:flex; border-top:0.5px solid rgba(0,0,0,0.15); background:#fff; position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:380px; z-index:100; border-radius:0 0 16px 16px; box-shadow:0 -2px 10px rgba(0,0,0,0.06); }
+.tab-item { flex:1; text-align:center; padding:7px 0 6px; font-size:10px; color:#999; cursor:pointer; border:none; background:none; font-family:inherit; }
+.tab-item.active { color:#4A90D9; }
+.tab-icon { font-size:16px; display:block; margin-bottom:1px; }
+.tab-content { padding:12px; padding-bottom:56px; }
+.loading-mask { display:flex; align-items:center; justify-content:center; padding:40px 0; font-size:13px; color:#999; }
+.error-msg { background:#fff3f3; color:#c33; padding:10px 12px; border-radius:8px; font-size:12px; margin:0 12px 10px; }
+.habit-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; }
+.habit-item { padding:6px 8px; background:#f5f5f5; border-radius:8px; }
+.advice-box { background:#EBF3FC; border:0.5px solid #B3D7F2; border-radius:8px; padding:10px 12px; font-size:12px; color:#333; line-height:1.6; margin-top:10px; }
+.compare-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.compare-card { background:#fff; border-radius:8px; padding:10px; text-align:center; cursor:pointer; border:0.5px solid rgba(0,0,0,0.15); }
+.compare-card.selected { border-color:#4A90D9; border-width:1.5px; }
+.compare-idx { font-size:22px; font-weight:500; }
+.compare-name { font-size:11px; color:#888; margin-top:2px; }
+.chart-wrap { background:#fff; border-radius:12px; padding:10px; margin-top:10px; border:0.5px solid rgba(0,0,0,0.15); }
+
+/* ========== 钓点相关 ========== */
+.map-container { height:340px; border-radius:12px; overflow:hidden; margin-bottom:10px; border:0.5px solid rgba(0,0,0,0.15); position:relative; }
+.map-container #amapContainer { width:100%; height:100%; }
+.spot-list-item { display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:8px; padding:10px 12px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.15); cursor:pointer; }
+.spot-list-item:hover { border-color:#4A90D9; }
+.spot-info { flex:1; min-width:0; }
+.spot-name { font-size:13px; font-weight:500; }
+.spot-addr { font-size:11px; color:#999; margin-top:1px; }
+.spot-tags { display:flex; gap:4px; margin-top:4px; flex-wrap:wrap; }
+.spot-tag { font-size:9px; padding:1px 6px; border-radius:8px; background:#f5f5f5; color:#888; }
+.spot-idx { text-align:center; min-width:44px; flex-shrink:0; }
+.spot-idx-val { font-size:18px; font-weight:500; }
+.spot-idx-lvl { font-size:10px; }
+.nav-btn { margin-top:4px; font-size:10px; color:#4A90D9; cursor:pointer; text-decoration:underline; }
+.map-legend { display:flex; gap:16px; font-size:10px; color:#999; margin-bottom:8px; justify-content:center; }
+.map-legend span { display:flex; align-items:center; gap:4px; }
+.legend-dot { width:10px; height:10px; border-radius:50%; }
+.loc-row { display:flex; gap:6px; margin-bottom:8px; }
+.loc-btn { background:rgba(255,255,255,0.85); border:0.5px solid rgba(0,0,0,0.2); border-radius:8px; padding:6px 10px; font-size:11px; cursor:pointer; display:flex; align-items:center; gap:4px; font-family:inherit; color:#333; }
+.loc-btn:active { background:#ddd; }
+.loc-btn.locating { opacity:0.6; pointer-events:none; }
+.loc-btn.outline { background:transparent; border-color:#4A90D9; color:#4A90D9; font-size:11px; }
+.loc-btn.primary { background:#4A90D9; color:#fff; border-color:#4A90D9; }
+.spot-distance { font-size:10px; color:#4A90D9; background:#EBF3FC; padding:1px 6px; border-radius:8px; display:inline-block; margin-top:3px; }
+.fav-btn { background:none; border:none; font-size:16px; cursor:pointer; padding:0 4px; line-height:1; }
+.nearby-sort-bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.nearby-label { font-size:11px; color:#4A90D9; }
+.nearby-clear { font-size:11px; color:#999; cursor:pointer; border:none; background:none; font-family:inherit; }
+.fav-empty { text-align:center; padding:20px 0; color:#bbb; font-size:12px; }
+
+/* ========== 钓点详情弹窗 ========== */
+.spot-detail-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:200; display:flex; align-items:flex-end; justify-content:center; }
+.spot-detail-panel { background:#fff; border-radius:16px 16px 0 0; width:380px; max-height:85vh; overflow-y:auto; padding:16px; animation:slideUp 0.25s ease-out; }
+@keyframes slideUp { from{transform:translateY(100%);} to{transform:translateY(0);} }
+.spot-detail-panel .sd-name { font-size:17px; font-weight:500; margin-bottom:4px; }
+.spot-detail-panel .sd-addr { font-size:12px; color:#999; margin-bottom:12px; }
+.sd-section { margin-bottom:12px; }
+.sd-section .sd-section-title { font-size:12px; font-weight:500; color:#666; margin-bottom:6px; display:flex; align-items:center; gap:4px; }
+.sd-field { display:flex; align-items:center; padding:6px 0; border-bottom:0.5px solid #f0f0f0; font-size:12px; }
+.sd-field:last-child { border-bottom:none; }
+.sd-field .sd-label { color:#999; width:70px; flex-shrink:0; }
+.sd-field .sd-value { color:#333; flex:1; }
+.sd-tag { display:inline-block; font-size:10px; padding:2px 8px; border-radius:10px; margin:2px; }
+.sd-tag.green { background:#EAF3DE; color:#27500A; }
+.sd-tag.blue { background:#E6F1FB; color:#0C447C; }
+.sd-tag.orange { background:#FAEEDA; color:#854F0B; }
+.sd-tag.red { background:#FCEBEB; color:#A32D2D; }
+.sd-tag.gray { background:#f0f0f0; color:#666; }
+.sd-index-box { background:#F6FFED; border-radius:8px; padding:10px 12px; text-align:center; margin-bottom:12px; }
+.sd-index-box .sd-idx-num { font-size:28px; font-weight:500; }
+.sd-index-box .sd-idx-fish { font-size:11px; color:#888; }
+.sd-close { float:right; background:none; border:none; font-size:20px; cursor:pointer; color:#999; padding:0; line-height:1; }
+.sd-actions { display:flex; gap:6px; margin-bottom:12px; }
+.sd-actions button { flex:1; padding:8px 0; border:none; border-radius:10px; font-size:12px; cursor:pointer; font-family:inherit; font-weight:500; }
+.sd-actions .sd-nav { background:#4A90D9; color:#fff; }
+.sd-actions .sd-fav { background:#f0f0f0; color:#333; }
+.sd-actions .sd-fav.starred { background:#FFF7E6; color:#E67E22; }
+
+/* ========== 评论模块 ========== */
+.comment-list { margin-bottom:10px; }
+.comment-item { background:#fafafa; border-radius:8px; padding:8px 10px; margin-bottom:6px; }
+.comment-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+.comment-user { font-size:12px; font-weight:500; color:#333; }
+.comment-time { font-size:10px; color:#bbb; }
+.comment-text { font-size:12px; color:#555; line-height:1.5; }
+.comment-empty { text-align:center; padding:16px 0; color:#ccc; font-size:12px; }
+.comment-input-row { display:flex; gap:6px; }
+.comment-input-row input { flex:1; padding:7px 10px; border:0.5px solid rgba(0,0,0,0.2); border-radius:10px; font-size:12px; font-family:inherit; color:#333; background:#fff; }
+.comment-input-row input:focus { outline:none; border-color:#4A90D9; }
+.comment-input-row button { padding:7px 14px; background:#4A90D9; color:#fff; border:none; border-radius:10px; font-size:12px; cursor:pointer; font-family:inherit; white-space:nowrap; }
+
+/* ========== 添加钓点表单 ========== */
+.modal-overlay { position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.45); z-index:200; display:flex; align-items:center; justify-content:center; }
+.modal-dialog { background:#fff; border-radius:14px; padding:18px 16px 14px; width:340px; max-height:85vh; overflow-y:auto; box-shadow:0 8px 32px rgba(0,0,0,0.2); }
+.modal-title { font-size:15px; font-weight:500; margin-bottom:14px; text-align:center; color:#333; }
+.modal-field { margin-bottom:10px; }
+.modal-label { font-size:11px; color:#888; margin-bottom:3px; display:block; }
+.modal-label .req { color:#E24B4A; }
+.modal-input { width:100%; padding:6px 10px; border:0.5px solid rgba(0,0,0,0.2); border-radius:8px; font-size:12px; font-family:inherit; color:#333; background:#fff; }
+.modal-input:focus { outline:none; border-color:#4A90D9; }
+.modal-textarea { width:100%; padding:6px 10px; border:0.5px solid rgba(0,0,0,0.2); border-radius:8px; font-size:12px; font-family:inherit; color:#333; background:#fff; resize:vertical; min-height:50px; }
+.modal-textarea:focus { outline:none; border-color:#4A90D9; }
+.modal-row { display:flex; gap:8px; }
+.modal-row .modal-field { flex:1; }
+.modal-select { width:100%; padding:6px 8px; border:0.5px solid rgba(0,0,0,0.2); border-radius:8px; font-size:12px; font-family:inherit; background:#fff; color:#333; }
+.modal-btns { display:flex; gap:8px; margin-top:14px; }
+.modal-btn { flex:1; padding:8px 0; border:none; border-radius:10px; font-size:13px; cursor:pointer; font-family:inherit; font-weight:500; }
+.modal-btn.primary { background:#4A90D9; color:#fff; }
+.modal-btn.secondary { background:#f0f0f0; color:#666; }
+.color-picker { display:flex; gap:6px; flex-wrap:wrap; }
+.color-dot { width:24px; height:24px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
+.color-dot.sel { border-color:#333; }
+.preset-row { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+.preset-chip { padding:4px 10px; border-radius:14px; font-size:11px; border:0.5px solid rgba(0,0,0,0.15); background:#fff; cursor:pointer; color:#555; }
+.preset-chip:hover { border-color:#4A90D9; color:#4A90D9; }
+.fish-tag-select { display:flex; flex-wrap:wrap; gap:4px; }
+.fish-tag-option { font-size:11px; padding:3px 8px; border-radius:12px; border:0.5px solid rgba(0,0,0,0.2); cursor:pointer; background:#fff; color:#666; }
+.fish-tag-option.sel { background:#4A90D9; color:#fff; border-color:#4A90D9; }
+
+/* ========== 我的页面 ========== */
+.notif-card { background:#fff; border-radius:8px; padding:10px 12px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.15); display:flex; align-items:center; gap:10px; }
+.notif-dot { width:8px; height:8px; border-radius:50%; flex:0 0 auto; }
+.notif-dot.on { background:#52C41A; }
+.notif-dot.off { background:#ddd; border:0.5px solid #ccc; }
+.notif-text { flex:1; }
+.notif-title { font-size:12px; font-weight:500; }
+.notif-desc { font-size:10px; color:#999; margin-top:1px; }
+.toggle-switch { width:36px; height:20px; border-radius:10px; position:relative; cursor:pointer; flex:0 0 auto; }
+.toggle-knob { width:16px; height:16px; border-radius:50%; background:#fff; position:absolute; top:2px; transition:0.2s; box-shadow:0 0.5px 2px rgba(0,0,0,0.15); }
+.pref-row { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; background:#fff; border-radius:8px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.15); }
+.pref-label { font-size:12px; }
+.pref-val { font-size:12px; color:#888; }
+input[type=range] { width:100%; accent-color:#4A90D9; }
+.location-row { display:flex; align-items:center; gap:8px; }
+.location-select { padding:4px 8px; border-radius:6px; border:0.5px solid rgba(255,255,255,0.3); background:rgba(255,255,255,0.15); color:#fff; font-size:12px; font-family:inherit; }
+/* 预加载动画 — JS执行前就可见 */
+.preload-screen { display:flex; flex-direction:column; align-items:center; justify-content:center; height:60vh; color:#4A90D9; }
+.preload-spinner { width:36px; height:36px; border:3px solid #E0E0E0; border-top-color:#4A90D9; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:12px; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.preload-text { font-size:13px; color:#999; }
+</style>
+</head>
+<body>
+<div class="app-wrap" id="appRoot"><div class="preload-screen"><div class="preload-spinner"></div><div class="preload-text">钓鱼天气加载中...</div></div></div>
+
+<script>
+// ===================================================================
+//  鱼种数据库（核心 6 种 + 自定义扩展）
+// ===================================================================
+const CORE_FISH = {
+  鲫鱼: { color:"#7F77DD", temp:[10,25,25], press:[1005,1018,25], wind:[0,4,15], hum:[40,80,15], desc:"底栖耐寒，气压敏感", layer:"底栖", food:"杂食" },
+  鲤鱼: { color:"#1D9E75", temp:[18,30,30], press:[1000,1015,25], wind:[0,4,20], hum:[45,75,10], desc:"底栖喜温，风力敏感", layer:"底栖", food:"杂食" },
+  草鱼: { color:"#D85A30", temp:[20,32,35], press:[1000,1015,20], wind:[0,3,15], hum:[40,70,10], desc:"中上层，喜热食量大", layer:"中上", food:"草食" },
+  青鱼: { color:"#3C6EAF", temp:[20,32,30], press:[1005,1020,25], wind:[0,3,10], hum:[50,75,10], desc:"底栖食螺蛳，水质敏感", layer:"底栖", food:"肉食(螺蛳)" },
+  翘嘴: { color:"#185FA5", temp:[16,28,25], press:[1005,1018,20], wind:[1,3,25], hum:[45,75,10], desc:"上层掠食，微风最佳", layer:"上层", food:"肉食" },
+  鲢鳙: { color:"#639922", temp:[20,35,35], press:[1005,1020,15], wind:[0,3,10], hum:[60,90,25], desc:"上层滤食，肥水更适合", layer:"上层", food:"滤食" },
+};
+const EXTRA_FISH_PRESETS = {
+  鳊鱼: { color:"#0F6E56", temp:[15,28,30], press:[1005,1018,20], wind:[0,3,20], hum:[45,75,15], desc:"中层草食，喜静水缓流", layer:"中层", food:"草食" },
+  罗非: { color:"#E24B4A", temp:[22,35,35], press:[1005,1020,20], wind:[0,4,15], hum:[50,85,10], desc:"极喜高温，15°C以下停口", layer:"中下", food:"杂食" },
+  黑鱼: { color:"#534AB7", temp:[22,34,30], press:[995,1015,15], wind:[0,4,20], hum:[55,90,10], desc:"肉食性，雨后浑水活跃", layer:"中上", food:"肉食" },
+  鲈鱼: { color:"#E67E22", temp:[15,30,30], press:[1005,1018,20], wind:[1,3,20], hum:[45,75,10], desc:"中上掠食，微风溶氧高更开口", layer:"中上", food:"肉食" },
+  鳜鱼: { color:"#C0392B", temp:[18,30,30], press:[1008,1020,25], wind:[0,2,15], hum:[45,70,10], desc:"底栖伏击，水质清澈气压稳定", layer:"底栖", food:"肉食" },
+  黄颡鱼: { color:"#B8860B", temp:[15,30,25], press:[1000,1015,20], wind:[0,4,15], hum:[55,90,20], desc:"底栖夜行，雨前雨后最活跃", layer:"底栖", food:"杂食(荤)" },
+  白条: { color:"#16A085", temp:[18,32,30], press:[1005,1020,15], wind:[0,3,15], hum:[40,75,20], desc:"上层集群，全天可钓极常见", layer:"上层", food:"杂食" },
+};
+let FISH_DB = {};
+function getFullFishDB() {
+  const custom = loadCustomFish();
+  FISH_DB = { ...CORE_FISH, ...custom };
+  return FISH_DB;
+}
+function loadCustomFish() {
+  try { return JSON.parse(localStorage.getItem("fishApp_customFish") || "{}"); }
+  catch { return {}; }
+}
+function saveCustomFish(obj) { localStorage.setItem("fishApp_customFish", JSON.stringify(obj)); }
+function deleteCustomFish(name) {
+  const cf = loadCustomFish(); delete cf[name]; saveCustomFish(cf);
+  if(currentFish===name) currentFish="鲫鱼";
+  getFullFishDB(); render();
+}
+
+// ===================================================================
+//  城市坐标
+// ===================================================================
+const CITY_COORDS = {
+  "杭州":{lat:30.25,lon:120.17},"北京":{lat:39.90,lon:116.41},"上海":{lat:31.23,lon:121.47},
+  "广州":{lat:23.13,lon:113.26},"成都":{lat:30.57,lon:104.07},"武汉":{lat:30.59,lon:114.31},
+  "南京":{lat:32.06,lon:118.78},"长沙":{lat:28.23,lon:112.94},"重庆":{lat:29.56,lon:106.55},
+  "西安":{lat:34.34,lon:108.94},
+};
+
+// ===================================================================
+//  钓点数据库（增强版：必填字段 + 评论）
+// ===================================================================
+const FISHING_SPOTS = {
+  "杭州": [
+    { id:"hz_01", name:"千岛湖钓鱼岛", addr:"淳安县千岛湖镇", lat:29.61, lon:119.04,
+      tags:["淡水湖","青鱼","翘嘴","鲫鱼"], desc:"中国最大人工湖，水质极佳",
+      route:"杭新景高速千岛湖出口下→沿环湖公路向南15公里→导航'千岛湖钓鱼岛'直达钓场停车场",
+      parking:"free", parkingFee:"钓场自带免费停车场，约30车位", spotType:"bank",
+      waterDepth:"2m-10m", entryFee:"free", entryFeeDetail:"免费野钓区，部分区域需向钓场交30元卫生费",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"hz_02", name:"富春江桐庐段", addr:"桐庐县富春江镇", lat:29.79, lon:119.66,
+      tags:["江河","鳊鱼","草鱼","鲤鱼"], desc:"江面宽阔，手竿绝佳钓场",
+      route:"杭新景高速桐庐出口下→沿S208向南→富春江大桥下游500米右侧土路进入",
+      parking:"paid", parkingFee:"路边划线车位，5元/天", spotType:"bank",
+      waterDepth:"1.5m-5m", entryFee:"free", entryFeeDetail:"完全免费野钓",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"hz_03", name:"西溪湿地河道", addr:"西湖区西溪湿地", lat:30.27, lon:120.07,
+      tags:["湿地","鲫鱼","黄颡鱼"], desc:"静水河道，适合休闲钓",
+      route:"文二西路→访溪路→西溪湿地北门停车场→步行300米至河道钓位",
+      parking:"paid", parkingFee:"湿地公园停车场，10元/次", spotType:"bank",
+      waterDepth:"1m-3m", entryFee:"free", entryFeeDetail:"外围河道免费，核心区需购公园门票80元",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"hz_04", name:"余杭径山水库", addr:"余杭区径山镇", lat:30.38, lon:119.85,
+      tags:["水库","青鱼","草鱼","鳊鱼"], desc:"山体水库，水质清澈",
+      route:"杭长高速径山出口→漕雅线向西8公里→径山村路口左转上山3公里",
+      parking:"free", parkingFee:"水库管理站旁有土停车场，约10车位", spotType:"bank",
+      waterDepth:"3m-15m", entryFee:"daily", entryFeeDetail:"50元/天/人",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "武汉": [
+    { id:"wh_01", name:"东湖风景区", addr:"武昌区东湖路", lat:30.55, lon:114.41,
+      tags:["湖泊","鲫鱼","鲤鱼","草鱼"], desc:"中国最大城中湖",
+      route:"欢乐大道→沿湖大道→东湖听涛景区停车场→步行至湖边垂钓区",
+      parking:"paid", parkingFee:"景区停车场6元/小时", spotType:"bank",
+      waterDepth:"1.5m-4m", entryFee:"free", entryFeeDetail:"指定垂钓区免费，其他区域禁止垂钓",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"wh_02", name:"梁子湖钓场", addr:"江夏区梁子湖", lat:30.26, lon:114.55,
+      tags:["湖泊","鳊鱼","翘嘴","鲫鱼"], desc:"武昌鱼故乡",
+      route:"关豹高速→梁子湖大道→梁子湖北岸→沿湖小路直行2公里见钓场指示牌",
+      parking:"free", parkingFee:"钓场外路边免费停车", spotType:"bank",
+      waterDepth:"2m-6m", entryFee:"free", entryFeeDetail:"北岸免费野钓区",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "北京": [
+    { id:"bj_01", name:"密云水库", addr:"密云区密云水库", lat:40.49, lon:116.85,
+      tags:["水库","鲫鱼","鲤鱼","草鱼"], desc:"北京最大水库",
+      route:"京承高速→密云出口→密关路→水库南线→潮河主坝停车场",
+      parking:"free", parkingFee:"水库停车场免费，周末车位紧张建议早到", spotType:"bank",
+      waterDepth:"3m-20m", entryFee:"free", entryFeeDetail:"指定开放区域免费，需注意保护区边界",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"bj_02", name:"金海湖", addr:"平谷区金海湖", lat:40.19, lon:117.35,
+      tags:["湖泊","草鱼","鲫鱼"], desc:"京郊热门钓场",
+      route:"京平高速→平谷出口→顺平路→金海湖景区→内部道路至钓场",
+      parking:"paid", parkingFee:"景区停车场10元/天", spotType:"bank",
+      waterDepth:"2m-8m", entryFee:"daily", entryFeeDetail:"100元/天（含景区门票）",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "南京": [
+    { id:"nj_01", name:"玄武湖", addr:"玄武区玄武湖", lat:32.07, lon:118.80,
+      tags:["湖泊","鲫鱼","鲤鱼"], desc:"城市休闲钓场",
+      route:"地铁1号线玄武门站→玄武湖公园→菱洲方向→垂钓区",
+      parking:"paid", parkingFee:"周边商场停车场8元/小时", spotType:"bank",
+      waterDepth:"1m-3m", entryFee:"free", entryFeeDetail:"指定垂钓区免费开放",
+      createdBy:"系统", createdAt:"2026-01-01" },
+    { id:"nj_02", name:"长江南京段", addr:"浦口区长江岸", lat:32.08, lon:118.73,
+      tags:["江河","青鱼","翘嘴","鳊鱼"], desc:"长江干流博大物",
+      route:"长江大桥→浦珠北路→滨江大道→沿江步道下行至江滩钓位",
+      parking:"free", parkingFee:"江滩路边免费停车", spotType:"bank",
+      waterDepth:"1m-8m（受潮汐影响）", entryFee:"free", entryFeeDetail:"完全免费，注意安全，远离主航道",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "上海": [
+    { id:"sh_01", name:"淀山湖", addr:"青浦区淀山湖", lat:31.14, lon:120.96,
+      tags:["湖泊","鲫鱼","鳊鱼","草鱼"], desc:"上海最大淡水湖",
+      route:"G50沪渝高速→青浦出口→淀山湖大道→环湖路→北岸钓场",
+      parking:"free", parkingFee:"环湖路沿途免费停车位", spotType:"bank",
+      waterDepth:"1.5m-5m", entryFee:"free", entryFeeDetail:"免费野钓",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "广州": [
+    { id:"gz_01", name:"流溪河水库", addr:"从化区良口镇", lat:23.77, lon:113.78,
+      tags:["水库","罗非","草鱼","黑鱼"], desc:"广州水源地，水质佳",
+      route:"大广高速→良口出口→G105国道→流溪河森林公园→水库钓区",
+      parking:"paid", parkingFee:"公园停车场15元/天", spotType:"bank",
+      waterDepth:"3m-15m", entryFee:"daily", entryFeeDetail:"30元/天",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "成都": [
+    { id:"cd_01", name:"三岔湖", addr:"简阳市三岔湖", lat:30.32, lon:104.27,
+      tags:["湖泊","鲫鱼","鲤鱼","草鱼"], desc:"成都后花园",
+      route:"天府大道南延线→三岔湖旅游快速通道→环湖路→东南岸钓场",
+      parking:"free", parkingFee:"钓场周边免费停车", spotType:"bank",
+      waterDepth:"2m-8m", entryFee:"free", entryFeeDetail:"免费野钓",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "长沙": [
+    { id:"cs_01", name:"湘江橘子洲", addr:"岳麓区湘江", lat:28.19, lon:112.96,
+      tags:["江河","鲫鱼","翘嘴","鳊鱼"], desc:"湘江长沙段经典钓位",
+      route:"橘子洲大桥→湘江中路→杜甫江阁北侧→沿江步梯下行至江滩",
+      parking:"paid", parkingFee:"江边停车位5元/小时", spotType:"bank",
+      waterDepth:"1m-6m", entryFee:"free", entryFeeDetail:"免费",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "重庆": [
+    { id:"cq_01", name:"长寿湖", addr:"长寿区长寿湖", lat:29.92, lon:107.22,
+      tags:["湖泊","草鱼","鲫鱼","翘嘴"], desc:"西南最大人工湖",
+      route:"沪渝高速→长寿湖出口→长寿湖镇→西岸环湖路→钓场指示牌",
+      parking:"free", parkingFee:"湖边免费停车场", spotType:"bank",
+      waterDepth:"2m-12m", entryFee:"free", entryFeeDetail:"免费区域为主，部分内湖收费",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+  "西安": [
+    { id:"xa_01", name:"灞河湿地", addr:"灞桥区灞河", lat:34.35, lon:109.07,
+      tags:["江河","鲫鱼","鲤鱼"], desc:"西安近郊野钓好去处",
+      route:"东三环→灞河东路→湿地公园→沿河向北800米至钓位集中区",
+      parking:"free", parkingFee:"河堤路免费停车", spotType:"bank",
+      waterDepth:"1m-3m", entryFee:"free", entryFeeDetail:"完全免费",
+      createdBy:"系统", createdAt:"2026-01-01" },
+  ],
+};
+
+// ===================================================================
+//  评论数据库（localStorage 持久化）
+// ===================================================================
+function getComments() {
+  try { return JSON.parse(localStorage.getItem("fishApp_comments") || "{}"); }
+  catch { return {}; }
+}
+function saveComments(obj) { localStorage.setItem("fishApp_comments", JSON.stringify(obj)); }
+
+function addComment(spotId, text) {
+  if(!text.trim()) return;
+  const all = getComments();
+  if(!all[spotId]) all[spotId] = [];
+  all[spotId].push({
+    user: "钓鱼人" + Math.floor(Math.random()*9000 + 1000),
+    text: text.trim(),
+    time: new Date().toLocaleDateString("zh-CN",{month:"2-digit",day:"2-digit"}) + " " +
+          new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}),
+    rating: Math.floor(Math.random()*2) + 4, // 模拟评分 4-5
+  });
+  saveComments(all);
+}
+
+// ===================================================================
+//  高德地图加载
+// ===================================================================
+let amapReady=false, amapMap=null;
+const AMAP_KEY="a379dda6bc341cca2561e94367f4b322";
+function loadAMap(){
+  return new Promise((resolve,reject)=>{
+    if(amapReady&&window.AMap){resolve(window.AMap);return;}
+    if(document.getElementById("amap-script")){
+      const check=setInterval(()=>{if(window.AMap){clearInterval(check);amapReady=true;resolve(window.AMap);}},200);
+      setTimeout(()=>{if(!window.AMap) reject(new Error("高德地图加载超时"));},15000);
+      return;
+    }
+    window._amapCallback=function(){amapReady=true;resolve(window.AMap);};
+    const script=document.createElement("script");
+    script.id="amap-script";
+    script.src=`https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&callback=_amapCallback&plugin=AMap.Geocoder,AMap.AdvancedInfoWindow`;
+    script.onerror=()=>reject(new Error("高德地图脚本加载失败"));
+    document.head.appendChild(script);
+  });
+}
+
+// ===================================================================
+//  全局状态
+// ===================================================================
+let currentCity="杭州", currentFish="鲫鱼", currentTab=0, weatherData=null;
+let notifications=[
+  {title:"明日适宜出钓！",desc:"明日气压1015hPa，温度22°C",time:"明天 06:00",on:true},
+  {title:"降雨提醒",desc:"今日下午降水概率升至65%",time:"今天 14:00",on:true},
+];
+window._showFavOnly=false;
+window._markerByName={};
+
+// ===================================================================
+//  设备定位 & 距离计算
+// ===================================================================
+let userLocation=null, usingNearby=false, usingGPS=false;
+function toRad(x){return x*Math.PI/180;}
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=toRad(lat2-lat1),dLon=toRad(lon2-lon1);
+  const a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getDeviceLocation(){
+  return new Promise((resolve,reject)=>{
+    if(!navigator.geolocation){reject(new Error("浏览器不支持定位"));return;}
+    navigator.geolocation.getCurrentPosition(
+      pos=>resolve({lat:pos.coords.latitude,lon:pos.coords.longitude}),
+      err=>reject(new Error(["用户拒绝定位","定位超时","位置不可用"][err.code-1]||"定位失败")),
+      {enableHighAccuracy:true,timeout:10000,maximumAge:60000}
+    );
+  });
+}
+async function locateMe(){
+  const btn=document.getElementById("locateBtn");
+  if(btn){btn.classList.add("locating");btn.textContent="定位中...";}
+  try{userLocation=await getDeviceLocation();usingNearby=true;render();}
+  catch(e){alert("定位失败："+e.message+"\n\n请在浏览器中允许定位权限。");if(btn){btn.classList.remove("locating");btn.innerHTML="我的位置";}}
+}
+function clearNearby(){usingNearby=false;userLocation=null;render();}
+
+// 首页定位 — 获取设备位置并用真实坐标拉天气
+async function locateOnHome(){
+  const btn=document.getElementById("gpsBtn");
+  if(btn){btn.classList.add("locating");btn.textContent="定位中...";}
+  try{
+    const pos=await getDeviceLocation();
+    userLocation=pos; usingGPS=true; usingNearby=true;
+    // 用真实坐标获取天气
+    weatherData=getDemoWeather(currentCity); render(); // 先用模拟数据占位
+    try{
+      const real=await fetchWeather(currentCity,pos.lat,pos.lon);
+      weatherData=real; render();
+    }catch(e){console.warn("GPS天气获取失败:",e.message);}
+    if(btn){btn.classList.remove("locating");btn.textContent="✅";}
+    setTimeout(()=>{const b=document.getElementById("gpsBtn");if(b)b.textContent="📍";},2000);
+  }catch(e){
+    if(btn){btn.classList.remove("locating");btn.textContent="📍";}
+    alert("定位失败："+e.message+"\n\n请在浏览器中允许定位权限。");
+  }
+}
+function clearGPS(){
+  usingGPS=false; userLocation=null; usingNearby=false;
+  loadWeather();
+}
+
+// ===================================================================
+//  收藏功能
+// ===================================================================
+function getFavorites(){try{return JSON.parse(localStorage.getItem("fishApp_favs")||"[]");}catch{return[];}}
+function saveFavorites(arr){localStorage.setItem("fishApp_favs",JSON.stringify(arr));}
+function toggleFavorite(name){
+  const arr=getFavorites();const idx=arr.indexOf(name);
+  if(idx>=0)arr.splice(idx,1);else arr.push(name);
+  saveFavorites(arr);render();
+}
+function toggleFavMode(){window._showFavOnly=!window._showFavOnly;render();}
+
+// ===================================================================
+//  工具函数
+// ===================================================================
+function kmhToBeaufort(kmh){
+  const ms=kmh/3.6;
+  if(ms<0.5)return 0;if(ms<1.5)return 1;if(ms<3.3)return 2;if(ms<5.5)return 3;
+  if(ms<7.9)return 4;if(ms<10.7)return 5;if(ms<13.8)return 6;if(ms<17.1)return 7;
+  return 8;
+}
+function calcIndex(fishKey,wd){
+  const f=FISH_DB[fishKey];
+  if(!wd)return{score:0,details:[],level:"--",color:"#999"};
+  const t=wd.temp,p=wd.press,w=wd.windLevel,h=wd.hum,r=wd.rainProb;
+  let score=0,details=[];
+  let ts=(t>=f.temp[0]&&t<=f.temp[1])?100:(t<f.temp[0])?Math.max(0,100-(f.temp[0]-t)*12):Math.max(0,100-(t-f.temp[1])*8);
+  score+=ts*f.temp[2]/100;details.push({label:"温度",val:ts,w:f.temp[2]});
+  let ps=(p>=f.press[0]&&p<=f.press[1])?100:(p<f.press[0])?Math.max(0,100-(f.press[0]-p)*10):Math.max(0,100-(p-f.press[1])*8);
+  score+=ps*f.press[2]/100;details.push({label:"气压",val:ps,w:f.press[2]});
+  let ws=(w>f.wind[1])?Math.max(0,100-(w-f.wind[1])*25):(w<f.wind[0]&&f.wind[0]>0)?Math.max(0,100-(f.wind[0]-w)*15):100;
+  score+=ws*f.wind[2]/100;details.push({label:"风力",val:ws,w:f.wind[2]});
+  let hs=(h>=f.hum[0]&&h<=f.hum[1])?100:(h<f.hum[0])?Math.max(0,100-(f.hum[0]-h)*3):Math.max(0,100-(h-f.hum[1])*3);
+  score+=hs*f.hum[2]/100;details.push({label:"湿度",val:hs,w:f.hum[2]});
+  let rs=r<=20?100:Math.max(0,100-r*3);
+  score+=rs*15/100;details.push({label:"降水",val:rs,w:15});
+  score=Math.round(Math.min(100,Math.max(0,score)));
+  return{score,details,level:score>=80?"极佳":score>=65?"适宜":score>=45?"一般":"不宜",
+    color:score>=80?"#52C41A":score>=65?"#4A90D9":score>=45?"#FAAD14":"#F5222D"};
+}
+
+// ===================================================================
+//  天气 API 调用
+// ===================================================================
+async function fetchWeather(city,lat,lon){
+  const coord=(lat!=null&&lon!=null)?{lat,lon}:(CITY_COORDS[city]||CITY_COORDS["杭州"]);
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lon}&current=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=Asia/Shanghai&forecast_days=3`;
+  const controller=new AbortController();
+  const timeout=setTimeout(()=>controller.abort(),12000);
+  try{
+    const resp=await fetch(url,{signal:controller.signal});clearTimeout(timeout);
+    if(!resp.ok)throw new Error("天气API请求失败");
+    const json=await resp.json();const c=json.current;
+    return{temp:Math.round(c.temperature_2m*10)/10,press:Math.round(c.pressure_msl*10)/10,
+      hum:c.relative_humidity_2m,windSpeed:c.wind_speed_10m,windLevel:kmhToBeaufort(c.wind_speed_10m),
+      rainProb:c.precipitation_probability,cloud:c.cloud_cover,weatherCode:c.weather_code,
+      updateTime:c.time,daily:json.daily};
+  }catch(e){clearTimeout(timeout);throw e;}
+}
+function getDemoWeather(city){
+  const base={"杭州":{temp:27,press:1012,hum:65,wind:8,rain:15,code:2},"北京":{temp:30,press:1008,hum:45,wind:12,rain:5,code:1},"上海":{temp:26,press:1014,hum:72,wind:10,rain:25,code:3},"广州":{temp:32,press:1005,hum:80,wind:6,rain:40,code:3},"成都":{temp:25,press:1010,hum:70,wind:5,rain:30,code:2},"武汉":{temp:29,press:1011,hum:68,wind:9,rain:20,code:2},"南京":{temp:28,press:1013,hum:62,wind:11,rain:15,code:2},"长沙":{temp:28,press:1010,hum:70,wind:7,rain:35,code:3},"重庆":{temp:28,press:1007,hum:75,wind:6,rain:30,code:3},"西安":{temp:30,press:1009,hum:50,wind:8,rain:10,code:1}};
+  const d=base[city]||base["杭州"];
+  return{temp:d.temp,press:d.press,hum:d.hum,windSpeed:d.wind,windLevel:kmhToBeaufort(d.wind),
+    rainProb:d.rain,cloud:50,weatherCode:d.code,updateTime:new Date().toISOString(),daily:null,_demo:true};
+}
+
+// ===================================================================
+//  自定义鱼种弹窗
+// ===================================================================
+const FISH_COLORS=["#7F77DD","#1D9E75","#D85A30","#3C6EAF","#185FA5","#639922","#E24B4A","#0F6E56","#534AB7","#E67E22","#C0392B","#B8860B","#16A085","#8E44AD","#2C3E50"];
+function addCustomFishDialog(){
+  const overlay=document.createElement("div");overlay.className="modal-overlay";overlay.id="customFishModal";
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal-dialog" onclick="event.stopPropagation()">
+    <div class="modal-title">添加自定义鱼种</div>
+    <div class="modal-label" style="margin-bottom:6px;">快速添加预设鱼种：</div>
+    <div class="preset-row">${Object.entries(EXTRA_FISH_PRESETS).map(([k,v])=>`<span class="preset-chip" onclick="quickAddFish('${k}')" title="${v.desc}">${k}</span>`).join("")}</div>
+    <div style="font-size:11px;color:#bbb;text-align:center;margin-bottom:10px;">-- 或手动输入参数 --</div>
+    <div class="modal-field"><label class="modal-label">鱼种名称</label><input class="modal-input" id="cfName" placeholder="如：鲶鱼、甲鱼..."></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label">最低温度°C</label><input class="modal-input" id="cfTempLow" type="number" value="15"></div><div class="modal-field"><label class="modal-label">最高温度°C</label><input class="modal-input" id="cfTempHigh" type="number" value="30"></div></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label">最低气压 hPa</label><input class="modal-input" id="cfPressLow" type="number" value="1005"></div><div class="modal-field"><label class="modal-label">最高气压 hPa</label><input class="modal-input" id="cfPressHigh" type="number" value="1020"></div></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label">水层</label><select class="modal-select" id="cfLayer"><option>上层</option><option>中上</option><option>中层</option><option>中下</option><option selected>底栖</option></select></div><div class="modal-field"><label class="modal-label">食性</label><select class="modal-select" id="cfFood"><option>杂食</option><option>草食</option><option>肉食</option><option>滤食</option></select></div></div>
+    <div class="modal-field"><label class="modal-label">颜色标记</label><div class="color-picker" id="cfColorPicker">${FISH_COLORS.map(c=>`<div class="color-dot" style="background:${c}" data-color="${c}" onclick="pickColor(this,'${c}')"></div>`).join("")}</div></div>
+    <input type="hidden" id="cfColor" value="#4A90D9">
+    <div class="modal-btns"><button class="modal-btn secondary" onclick="document.getElementById('customFishModal').remove()">取消</button><button class="modal-btn primary" onclick="addCustomFish()">添加</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function pickColor(el,color){document.querySelectorAll("#cfColorPicker .color-dot").forEach(d=>d.classList.remove("sel"));el.classList.add("sel");document.getElementById("cfColor").value=color;}
+function quickAddFish(name){
+  const preset=EXTRA_FISH_PRESETS[name];if(!preset)return;
+  const cf=loadCustomFish();cf[name]={...preset,_custom:true};saveCustomFish(cf);getFullFishDB();
+  document.getElementById("customFishModal")?.remove();currentFish=name;render();
+}
+function addCustomFish(){
+  const name=document.getElementById("cfName").value.trim();const cf=loadCustomFish();
+  if(!name){alert("请输入鱼种名称");return;}if(CORE_FISH[name]||cf[name]){alert("该鱼种已存在");return;}
+  cf[name]={color:document.getElementById("cfColor").value||"#4A90D9",
+    temp:[parseFloat(document.getElementById("cfTempLow").value)||15,parseFloat(document.getElementById("cfTempHigh").value)||30,25],
+    press:[parseFloat(document.getElementById("cfPressLow").value)||1005,parseFloat(document.getElementById("cfPressHigh").value)||1020,20],
+    wind:[0,3,15],hum:[40,80,15],
+    desc:document.getElementById("cfLayer").value+"·"+document.getElementById("cfFood").value,
+    layer:document.getElementById("cfLayer").value,food:document.getElementById("cfFood").value,_custom:true};
+  saveCustomFish(cf);getFullFishDB();document.getElementById("customFishModal").remove();currentFish=name;render();
+}
+
+// ===================================================================
+//  添加钓点弹窗
+// ===================================================================
+function addSpotDialog(){
+  const fishNames=Object.keys(FISH_DB);
+  const overlay=document.createElement("div");overlay.className="modal-overlay";overlay.id="addSpotModal";
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal-dialog" onclick="event.stopPropagation()">
+    <div class="modal-title">添加新钓点</div>
+    <div class="modal-field"><label class="modal-label"><span class="req">*</span> 钓点名称</label><input class="modal-input" id="asName" placeholder="如：东湖落雁岛北岸"><input type="hidden" id="asLat"><input type="hidden" id="asLon"></div>
+    <div class="modal-field"><label class="modal-label"><span class="req">*</span> GPS坐标</label><div style="display:flex;gap:6px;align-items:center;"><input class="modal-input" id="asCoord" placeholder="纬度,经度" readonly style="background:#f8f8f8;flex:1;"><button class="loc-btn primary" id="pickLocBtn" onclick="pickCurrentLocation()" style="white-space:nowrap;">📍 获取当前位置</button></div></div>
+    <div class="modal-field"><label class="modal-label"><span class="req">*</span> 地址/区域</label><input class="modal-input" id="asAddr" placeholder="如：武昌区东湖路"></div>
+    <div class="modal-field"><label class="modal-label"><span class="req">*</span> 钓位到达路线</label><textarea class="modal-textarea" id="asRoute" placeholder="从XX路进入→沿XX走→看到XX后左转→..."></textarea></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label"><span class="req">*</span> 停车情况</label><select class="modal-select" id="asParking" onchange="document.getElementById('asParkFee').style.display=this.value==='free'?'none':'block'"><option value="free">免费停车</option><option value="paid">收费停车</option><option value="none">不可停车</option></select></div><div class="modal-field" id="asParkFee"><label class="modal-label">停车费用说明</label><input class="modal-input" id="asParkFeeText" placeholder="如：5元/天"></div></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label"><span class="req">*</span> 钓位类型</label><select class="modal-select" id="asSpotType"><option value="bank">岸钓</option><option value="boat">船钓</option><option value="platform">浮台</option><option value="other">其他</option></select></div><div class="modal-field"><label class="modal-label">水深范围</label><input class="modal-input" id="asDepth" placeholder="如：1.5m-3m"></div></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label"><span class="req">*</span> 收费情况</label><select class="modal-select" id="asEntryFee" onchange="document.getElementById('asFeeRow').style.display=this.value==='free'?'none':'block'"><option value="free">免费野钓</option><option value="daily">按天收费</option><option value="kg">按斤收费</option></select></div><div class="modal-field" id="asFeeRow"><label class="modal-label">费用说明</label><input class="modal-input" id="asFeeText" placeholder="如：50元/天"></div></div>
+    <div class="modal-field"><label class="modal-label"><span class="req">*</span> 主要鱼种（可多选）</label><div class="fish-tag-select" id="asFishTags">${fishNames.map(k=>`<span class="fish-tag-option" data-fish="${k}" onclick="toggleFishTag(this,'${k}')">${k}</span>`).join("")}</div></div>
+    <div class="modal-field"><label class="modal-label">钓点描述</label><textarea class="modal-textarea" id="asDesc" placeholder="简单描述钓点特点..." style="min-height:40px;"></textarea></div>
+    <div class="modal-btns"><button class="modal-btn secondary" onclick="document.getElementById('addSpotModal').remove()">取消</button><button class="modal-btn primary" onclick="submitNewSpot()">提交钓点</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function toggleFishTag(el,name){
+  el.classList.toggle("sel");
+  // 记录选中
+  el._selFish=el._selFish||new Set();
+  if(el.classList.contains("sel")){el._selFish.add(name);}else{el._selFish.delete(name);}
+}
+
+async function pickCurrentLocation(){
+  const btn=document.getElementById("pickLocBtn");
+  const coordInput=document.getElementById("asCoord");
+  const latInput=document.getElementById("asLat");
+  const lonInput=document.getElementById("asLon");
+  if(!btn||!coordInput) return;
+  btn.classList.add("locating"); btn.textContent="定位中...";
+  try{
+    const pos=await getDeviceLocation();
+    latInput.value=pos.lat.toFixed(6);
+    lonInput.value=pos.lon.toFixed(6);
+    coordInput.value=pos.lat.toFixed(6)+", "+pos.lon.toFixed(6);
+    btn.classList.remove("locating"); btn.textContent="✅ 已获取位置";
+    setTimeout(()=>{btn.textContent="📍 获取当前位置";},2000);
+  }catch(e){
+    btn.classList.remove("locating"); btn.textContent="📍 获取当前位置";
+    alert("定位失败："+e.message+"\n\n请在浏览器中允许定位权限，或手动输入坐标。");
+  }
+}
+
+function pickSpotOnMap(){
+  alert("请在下方地图中找到目标位置，然后返回此窗口手动输入坐标。\n\n（当前版本为模拟模式，后续接入高德地图选址功能后可在图上直接点击选点）");
+}
+
+function submitNewSpot(){
+  const name=document.getElementById("asName").value.trim();
+  const lat=parseFloat(document.getElementById("asLat").value);
+  const lon=parseFloat(document.getElementById("asLon").value);
+  const addr=document.getElementById("asAddr").value.trim();
+  const route=document.getElementById("asRoute").value.trim();
+  const parking=document.getElementById("asParking").value;
+  const parkingFee=document.getElementById("asParkFeeText")?.value.trim()||"";
+  const spotType=document.getElementById("asSpotType").value;
+  const waterDepth=document.getElementById("asDepth").value.trim();
+  const entryFee=document.getElementById("asEntryFee").value;
+  const entryFeeDetail=document.getElementById("asFeeText")?.value.trim()||"";
+  const desc=document.getElementById("asDesc").value.trim();
+  // 收集鱼种
+  const fishTags=[];
+  document.querySelectorAll("#asFishTags .fish-tag-option.sel").forEach(el=>fishTags.push(el.dataset.fish));
+
+  // 验证必填项
+  if(!name){alert("请输入钓点名称");return;}
+  if(isNaN(lat)||isNaN(lon)){alert("请设置GPS坐标（点击'从地图选坐标'或在下方地图上长按选点）");return;}
+  if(!addr){alert("请输入地址");return;}
+  if(!route){alert("请输入钓位到达路线");return;}
+  if(fishTags.length===0){alert("请至少选择一个鱼种");return;}
+
+  // 构建钓点对象
+  const spot={
+    id:"usr_"+Date.now(),
+    name,lat,lon,addr,tags:fishTags,desc:desc||"用户添加钓点",
+    route,parking,parkingFee,spotType,waterDepth:waterDepth||"未知",
+    entryFee,entryFeeDetail:entryFeeDetail||(entryFee==="free"?"免费野钓":""),
+    createdBy:"用户",createdAt:new Date().toISOString().slice(0,10)
+  };
+
+  // 存入localStorage
+  const userSpots=getUserSpots();
+  userSpots.push(spot);
+  saveUserSpots(userSpots);
+
+  document.getElementById("addSpotModal").remove();
+  render();
+}
+
+function getUserSpots(){
+  try{return JSON.parse(localStorage.getItem("fishApp_userSpots")||"[]");}catch{return[];}
+}
+function saveUserSpots(arr){localStorage.setItem("fishApp_userSpots",JSON.stringify(arr));}
+
+// ===================================================================
+//  钓点详情弹窗
+// ===================================================================
+function openSpotDetail(spot){
+  const favs=getFavorites();
+  const isF=favs.includes(spot.name);
+  const comments=getComments();
+  const spotComments=comments[spot.id]||[];
+  const idx=calcIndex(currentFish,weatherData);
+  const parkingLabel=spot.parking==="free"?"免费停车":spot.parking==="paid"?"收费停车":"不可停车";
+  const parkingColor=spot.parking==="free"?"green":spot.parking==="paid"?"orange":"red";
+  const spotTypeLabel=spot.spotType==="bank"?"岸钓":spot.spotType==="boat"?"船钓":spot.spotType==="platform"?"浮台":"其他";
+  const entryLabel=spot.entryFee==="free"?"免费":spot.entryFee==="daily"?"按天收费":"按斤收费";
+
+  const overlay=document.createElement("div");
+  overlay.className="spot-detail-overlay";
+  overlay.id="spotDetailOverlay";
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+
+  overlay.innerHTML=`<div class="spot-detail-panel" onclick="event.stopPropagation()">
+    <button class="sd-close" onclick="document.getElementById('spotDetailOverlay').remove()">&times;</button>
+    <div class="sd-name">${isF?"⭐":""} ${spot.name}</div>
+    <div class="sd-addr">${spot.addr}</div>
+    <div class="sd-index-box">
+      <div class="sd-idx-num" style="color:${idx.color}">${idx.score}</div>
+      <div class="sd-idx-fish">${currentFish} · 今日垂钓指数 · ${idx.level}</div>
+    </div>
+    <div class="sd-actions">
+      <button class="sd-nav" onclick="navigateToSpot(${spot.lat},${spot.lon},'${spot.name.replace(/'/g,"\\'")}')">导航前往</button>
+      <button class="sd-fav ${isF?'starred':''}" onclick="toggleFavorite('${spot.name.replace(/'/g,"\\'")}');document.getElementById('spotDetailOverlay').remove();">${isF?'已收藏':'收藏钓点'}</button>
+    </div>
+    <div class="sd-section"><div class="sd-section-title">鱼种标签</div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">${spot.tags.map(t=>`<span class="spot-tag">${t}</span>`).join("")}</div>
+    </div>
+    <div class="sd-section"><div class="sd-section-title">钓点详情</div>
+      <div class="sd-field"><span class="sd-label">钓位类型</span><span class="sd-value">${spotTypeLabel}</span></div>
+      <div class="sd-field"><span class="sd-label">水深范围</span><span class="sd-value">${spot.waterDepth||"未知"}</span></div>
+      <div class="sd-field"><span class="sd-label">停车</span><span class="sd-value"><span class="sd-tag ${parkingColor}">${parkingLabel}</span> ${spot.parkingFee||""}</span></div>
+      <div class="sd-field"><span class="sd-label">收费</span><span class="sd-value"><span class="sd-tag ${spot.entryFee==='free'?'green':'orange'}">${entryLabel}</span> ${spot.entryFeeDetail||""}</span></div>
+    </div>
+    <div class="sd-section"><div class="sd-section-title">到达路线</div>
+      <div style="font-size:12px;color:#555;line-height:1.6;background:#fafafa;border-radius:8px;padding:8px 10px;">${spot.route}</div>
+    </div>
+    <div class="sd-section"><div class="sd-section-title">钓点描述</div>
+      <div style="font-size:12px;color:#555;line-height:1.6;">${spot.desc}</div>
+    </div>
+    <div class="sd-section"><div class="sd-section-title">钓友评论 (${spotComments.length})</div>
+      <div class="comment-list" id="commentList_${spot.id}">
+        ${spotComments.length===0?`<div class="comment-empty">暂无评论，成为第一个评论的人吧</div>`:
+          spotComments.map(c=>`<div class="comment-item">
+            <div class="comment-header"><span class="comment-user">${c.user}</span><span class="comment-time">${c.time}</span></div>
+            <div class="comment-text">${c.text}</div>
+          </div>`).join("")}
+      </div>
+      <div class="comment-input-row">
+        <input placeholder="写下你的评论..." id="commentInput_${spot.id}" maxlength="200">
+        <button onclick="submitComment('${spot.id}')">发送</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function submitComment(spotId){
+  const input=document.getElementById("commentInput_"+spotId);
+  if(!input||!input.value.trim())return;
+  addComment(spotId,input.value.trim());
+  // 刷新评论列表（在当前弹窗内）
+  const comments=getComments();
+  const list=document.getElementById("commentList_"+spotId);
+  if(!list)return;
+  const spotComments=comments[spotId]||[];
+  list.innerHTML=spotComments.length===0?`<div class="comment-empty">暂无评论，成为第一个评论的人吧</div>`:
+    spotComments.map(c=>`<div class="comment-item">
+      <div class="comment-header"><span class="comment-user">${c.user}</span><span class="comment-time">${c.time}</span></div>
+      <div class="comment-text">${c.text}</div>
+    </div>`).join("");
+  input.value="";
+}
+
+// ===================================================================
+//  主渲染
+// ===================================================================
+async function loadWeather(){
+  if(!weatherData){weatherData=getDemoWeather(currentCity);render();}
+  try{
+    const real=usingGPS&&userLocation
+      ?await fetchWeather(currentCity,userLocation.lat,userLocation.lon)
+      :await fetchWeather(currentCity);
+    weatherData=real;render();
+  }
+  catch(e){console.warn("实时天气获取失败，使用模拟数据:",e.message);if(!weatherData){weatherData=getDemoWeather(currentCity);render();}}
+}
+
+function render(){
+  getFullFishDB();
+  const root=document.getElementById("appRoot");
+  const result=calcIndex(currentFish,weatherData);
+  const f=FISH_DB[currentFish];
+  const wd=weatherData;
+  const weatherDesc=wd?getWeatherDesc(wd.weatherCode):"--";
+  const updateStr=wd?`更新于 ${wd.updateTime.slice(11,16)}`:"";
+
+  root.innerHTML=`
+    <div class="app-header">
+      <div class="header-top">
+        <div class="location-row">
+          ${usingGPS
+            ? `<div class="header-city" style="display:flex;align-items:center;gap:4px;"><span style="font-size:14px;">📍</span><span>我的位置</span></div>
+               <button class="header-btn" onclick="clearGPS()" style="font-size:11px;padding:2px 8px;">取消</button>`
+            : `<button class="header-btn" id="gpsBtn" onclick="locateOnHome()" style="font-size:13px;padding:3px 8px;" title="获取当前位置">📍</button>
+               <select class="location-select" onchange="changeCity(this.value)">
+                 ${Object.keys(CITY_COORDS).map(c=>`<option ${c===currentCity?"selected":""}>${c}</option>`).join("")}
+               </select>`
+          }
+          <div style="font-size:11px;opacity:0.7;margin-left:4px;">${weatherDesc}</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="update-time">${updateStr}</span>
+          <button class="refresh-btn" onclick="loadWeather()" title="刷新天气">&circlearrowright;</button>
+        </div>
+      </div>
+      <div style="font-size:15px;font-weight:500;margin-bottom:10px;">${currentFish} · 垂钓天气</div>
+      <div class="fish-selector">
+        ${Object.keys(CORE_FISH).map(k=>`<div class="fish-chip ${k===currentFish?'active':''}" onclick="selectFish('${k}')">${k}</div>`).join("")}
+        ${Object.keys(loadCustomFish()).map(k=>`<div class="fish-chip ${k===currentFish?'active':''}" onclick="selectFish('${k}')" style="position:relative;">${k}<span class="custom-chip-del" onclick="event.stopPropagation();deleteCustomFish('${k}')">&times;</span></div>`).join("")}
+        <div class="fish-chip add-chip" onclick="addCustomFishDialog()" title="添加鱼种">+</div>
+      </div>
+    </div>
+    <div class="index-card">
+      <div style="font-size:12px;color:#999;">${currentFish}垂钓指数</div>
+      <div class="idx-score" style="color:${result.color}">${result.score?result.score:"--"}</div>
+      <div class="idx-level" style="color:${result.color}">${result.level}</div>
+      <div class="idx-fish">${currentFish} · ${f.layer} · ${f.food}</div>
+    </div>
+    ${wd?`<div class="weather-row">
+      <div class="w-item"><div class="w-val">${wd.temp}°</div><div class="w-label">气温</div></div>
+      <div class="w-item"><div class="w-val">${wd.press}</div><div class="w-label">气压</div></div>
+      <div class="w-item"><div class="w-val">${wd.windLevel}级</div><div class="w-label">风力</div></div>
+      <div class="w-item"><div class="w-val">${wd.hum}%</div><div class="w-label">湿度</div></div>
+      <div class="w-item"><div class="w-val">${wd.rainProb}%</div><div class="w-label">降水</div></div>
+    </div>`:""}
+    <div class="tab-bar">
+      ${["天气指数","鱼种对比","共享钓点","我的"].map((t,i)=>`<button class="tab-item ${i===currentTab?'active':''}" onclick="switchTab(${i})"><span class="tab-icon">${["☀️","🐟","📍","👤"][i]}</span>${t}</button>`).join("")}
+    </div>
+    <div class="tab-content" id="tabContent"></div>`;
+  renderTabContent(result);
+}
+
+function getWeatherDesc(code){
+  const map={0:"晴",1:"大部晴",2:"多云",3:"阴",45:"雾",48:"雾",51:"小毛毛雨",53:"毛毛雨",55:"大毛毛雨",61:"小雨",63:"中雨",65:"大雨",71:"小雪",73:"中雪",75:"大雪",80:"阵雨",81:"阵雨",82:"强阵雨",95:"雷暴",96:"雷暴冰雹",99:"强雷暴"};
+  return map[code]||"未知";
+}
+
+function renderTabContent(result){
+  const el=document.getElementById("tabContent");
+  const f=FISH_DB[currentFish];
+  const wd=weatherData;
+
+  if(currentTab===0){
+    // 天气指数
+    el.innerHTML=wd?`
+      <div class="detail-section">
+        <div class="detail-title">${currentFish} · 各因子评分明细</div>
+        ${result.details.map(d=>{const c=d.val>=80?"#52C41A":d.val>=60?"#4A90D9":d.val>=40?"#FAAD14":"#F5222D";return`<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${d.val}%;background:${c}"></div></div><div class="bar-score" style="color:${c}">${Math.round(d.val)}</div></div>`;}).join("")}
+      </div>
+      <div class="detail-section">
+        <div class="detail-title">${currentFish}习性参数</div>
+        <div class="habit-grid">
+          <div class="habit-item">水层：<b>${f.layer}</b></div>
+          <div class="habit-item">食性：<b>${f.food}</b></div>
+          <div class="habit-item">适温：<b>${f.temp[0]}–${f.temp[1]}°C</b></div>
+          <div class="habit-item">气压：<b>${f.press[0]}–${f.press[1]}</b></div>
+        </div>
+      </div>
+      <div class="advice-box">
+        <div style="font-weight:500;margin-bottom:4px;color:#1976D2;">今日作钓建议</div>
+        ${result.score>=80?`今日${currentFish}指数极佳！气温${wd.temp}°C在最佳区间，气压${wd.press}hPa稳定。建议${f.layer==="底栖"?"选深水区底部守钓":f.layer==="上层"?"上层浮钓，找接口":"中层找接口钓法"}，早6–9点、晚16–19点为黄金时段。`:result.score>=65?`今日${currentFish}指数适宜。注意${result.details.sort((a,b)=>a.val-b.val)[0].label}偏低，建议调整钓位或钓深。`:`今日${currentFish}指数一般，${result.details.sort((a,b)=>a.val-b.val)[0].label}不理想，建议${result.score<45?"改日再钓":"谨慎出钓，选背风位置"}。`}
+      </div>
+    `:`<div class="loading-mask">等待天气数据...</div>`;
+
+  } else if(currentTab===1){
+    // 鱼种对比
+    const allResults=Object.keys(FISH_DB).map(k=>({name:k,...calcIndex(k,wd)}));
+    const best=allResults.sort((a,b)=>b.score-a.score);
+    el.innerHTML=`
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">今日各鱼种垂钓指数对比（点击切换主选鱼种）</div>
+      <div class="compare-grid">
+        ${best.map((r,i)=>`<div class="compare-card ${r.name===currentFish?'selected':''}" onclick="selectFish('${r.name}')" style="border-color:${r.name===currentFish?FISH_DB[r.name].color:'rgba(0,0,0,0.15)'};border-width:${r.name===currentFish?1.5:0.5}px;"><div style="font-size:11px;color:#999;">${i===0?"":i===1?"":i===2?"":""} ${r.name}</div><div class="compare-idx" style="color:${r.color}">${r.score}</div><div class="compare-name" style="color:${r.color}">${r.level}</div></div>`).join("")}
+      </div>
+      <div class="chart-wrap">
+        <div class="detail-title">各鱼种指数柱状图</div>
+        <div style="position:relative;width:100%;height:220px;"><canvas id="compareChart" role="img" aria-label="鱼种指数对比"></canvas></div>
+      </div>`;
+    function drawCompareChart(){
+      const canvas=document.getElementById("compareChart");
+      if(!canvas||!wd)return;
+      const dpr=window.devicePixelRatio||1;
+      const rect=canvas.parentElement.getBoundingClientRect();
+      const W=rect.width*dpr,H=220*dpr;
+      canvas.width=W;canvas.height=H;canvas.style.width=rect.width+"px";canvas.style.height="220px";
+      const ctx=canvas.getContext("2d");ctx.scale(dpr,dpr);
+      const w=rect.width,h=220,pad={top:16,right:12,bottom:32,left:32};
+      const cw=w-pad.left-pad.right,ch=h-pad.top-pad.bottom;
+      const n=allResults.length,barW=Math.min(24,(cw/n)*0.65),gap=cw/n;
+      ctx.strokeStyle="#f0f0f0";ctx.lineWidth=0.5;
+      for(let yv=0;yv<=100;yv+=20){const y=pad.top+ch*(1-yv/100);ctx.beginPath();ctx.moveTo(pad.left,y);ctx.lineTo(w-pad.right,y);ctx.stroke();ctx.fillStyle="#bbb";ctx.font="9px sans-serif";ctx.textAlign="right";ctx.fillText(yv,pad.left-5,y+3);}
+      allResults.forEach((r,i)=>{
+        const x=pad.left+gap*i+(gap-barW)/2,bh=Math.max(2,(r.score/100)*ch),y=pad.top+ch-bh;
+        const color=FISH_DB[r.name]?FISH_DB[r.name].color:"#999";
+        const grad=ctx.createLinearGradient(x,y,x,pad.top+ch);grad.addColorStop(0,color);grad.addColorStop(1,color+"66");
+        ctx.fillStyle=grad;ctx.beginPath();
+        const r2=Math.min(3,barW/4);
+        ctx.moveTo(x+r2,pad.top+ch);ctx.lineTo(x+r2,y+r2);ctx.quadraticCurveTo(x,y,x+r2,y);
+        ctx.lineTo(x+barW-r2,y);ctx.quadraticCurveTo(x+barW,y,x+barW,y+r2);ctx.lineTo(x+barW,pad.top+ch);ctx.fill();
+        ctx.fillStyle="#555";ctx.font="bold 10px sans-serif";ctx.textAlign="center";ctx.fillText(r.score,x+barW/2,y-5);
+        ctx.fillStyle="#888";ctx.font="9px sans-serif";ctx.save();ctx.translate(x+barW/2,pad.top+ch+10);ctx.rotate(-0.5);ctx.fillText(r.name,0,0);ctx.restore();
+      });
+    }
+    requestAnimationFrame(()=>requestAnimationFrame(drawCompareChart));
+
+  } else if(currentTab===2){
+    // 共享钓点
+    let spots=FISHING_SPOTS[currentCity]||[];
+    const userSpots=getUserSpots().filter(s=>s.addr&&s.addr.includes(currentCity)||true);
+    // 合并系统钓点 + 用户钓点（同城）
+    const userSpotsCity=getUserSpots().filter(s=>{
+      const coord=CITY_COORDS[currentCity];
+      if(!coord)return false;
+      const dist=haversine(coord.lat,coord.lon,s.lat,s.lon);
+      return dist<80; // 80km 范围内
+    });
+    const allSpots=[...spots,...userSpotsCity];
+    const favs=getFavorites();
+
+    let nearbySpots=[];
+    if(usingNearby&&userLocation){
+      nearbySpots=allSpots.map(s=>({...s,dist:haversine(userLocation.lat,userLocation.lon,s.lat,s.lon)})).sort((a,b)=>a.dist-b.dist);
+    }
+
+    const displaySpots=usingNearby?nearbySpots:allSpots;
+    const showFavOnly=window._showFavOnly;
+    const finalSpots=showFavOnly?displaySpots.filter(s=>favs.includes(s.name)):displaySpots;
+
+    el.innerHTML=`
+      <div class="loc-row">
+        <button class="loc-btn" id="locateBtn" onclick="locateMe()">我的位置</button>
+        <button class="loc-btn outline" onclick="toggleFavMode()">${window._showFavOnly?"全部":"收藏"}</button>
+        <button class="loc-btn primary" onclick="addSpotDialog()">+ 添加钓点</button>
+      </div>
+      ${usingNearby?`<div class="nearby-sort-bar"><span class="nearby-label">按距离排序 · 最近 ${displaySpots.length} 个钓点</span><button class="nearby-clear" onclick="clearNearby()">恢复城市列表</button></div>`:""}
+      <div class="map-container"><div id="amapContainer"></div></div>
+      <div class="map-legend">
+        <span><span class="legend-dot" style="background:#52C41A;"></span>极佳</span>
+        <span><span class="legend-dot" style="background:#4A90D9;"></span>适宜</span>
+        <span><span class="legend-dot" style="background:#FAAD14;"></span>一般</span>
+        <span><span class="legend-dot" style="background:#F5222D;"></span>不宜</span>
+      </div>
+      ${window._showFavOnly&&finalSpots.length===0?`<div class="fav-empty">暂无收藏钓点<br><span style="font-size:11px;">在钓点列表中点击收藏</span></div>`:`
+        <div class="detail-title">${usingNearby?"附近钓点":currentCity+" 周边钓点"} (${finalSpots.length}个)</div>
+        <div style="margin-bottom:4px;">${finalSpots.map((s,i)=>{
+          const idx=wd?calcIndex(currentFish,wd):null;
+          const dist=s.dist;const distStr=dist!==undefined?(dist<1?Math.round(dist*1000)+"m":dist.toFixed(1)+"km"):"";
+          const isF=favs.includes(s.name);
+          const safeName=s.name.replace(/'/g,"\\'");
+          const commentCount=(getComments()[s.id]||[]).length;
+          return`<div class="spot-list-item" onclick="openSpotDetail(${JSON.stringify(s).replace(/"/g,'&quot;')})">
+            <div class="spot-info">
+              <div class="spot-name">${isF?"":""} ${s.name} <span style="font-size:10px;color:#bbb;">${commentCount>0?commentCount+"条评论":""}</span></div>
+              <div class="spot-addr">${s.addr}</div>
+              ${distStr?`<div class="spot-distance">${distStr}</div>`:""}
+              <div class="spot-tags">${s.tags.map(t=>`<span class="spot-tag">${t}</span>`).join("")} <span class="spot-tag" style="background:${s.spotType==='bank'?'#E6F1FB':'#EAF3DE'};color:${s.spotType==='bank'?'#0C447C':'#27500A'}">${s.spotType==='bank'?'岸钓':s.spotType==='boat'?'船钓':s.spotType==='platform'?'浮台':'其他'}</span></div>
+            </div>
+            <div class="spot-idx">
+              <div class="spot-idx-val" style="color:${idx?idx.color:'#999'}">${idx?idx.score:'--'}</div>
+              <div class="spot-idx-lvl" style="color:${idx?idx.color:'#999'}">${currentFish}指数</div>
+              <button class="fav-btn" onclick="event.stopPropagation();toggleFavorite('${safeName}')" style="font-size:14px;">${isF?"":"☆"}</button>
+            </div>
+          </div>`;
+        }).join("")}</div>
+      `}
+    `;
+    initAMap(allSpots,nearbySpots);
+
+  } else if(currentTab===3){
+    // 我的
+    el.innerHTML=`
+      <div style="text-align:center;padding:10px 0 14px;">
+        <div style="width:56px;height:56px;border-radius:50%;background:#EBF3FC;color:#4A90D9;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:500;margin:0 auto 8px;">钓</div>
+        <div style="font-size:15px;font-weight:500;">钓鱼人</div>
+        <div style="font-size:12px;color:#999;margin-top:2px;">自然水域手竿 · ${currentCity}</div>
+      </div>
+      <div class="detail-title" style="margin-bottom:8px;">智能提醒</div>
+      ${notifications.map((n,i)=>`<div class="notif-card"><div class="notif-dot ${n.on?"on":"off"}"></div><div class="notif-text"><div class="notif-title">${n.title}</div><div class="notif-desc">${n.desc}</div></div><div class="toggle-switch" style="background:${n.on?"#52C41A":"#ddd"}" onclick="toggleNotif(${i})"><div class="toggle-knob" style="left:${n.on?18:2}px;"></div></div></div>`).join("")}
+      <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid rgba(0,0,0,0.1);">
+        <div class="pref-row" onclick="alert('已添加'+getUserSpots().length+'个钓点')"><span class="pref-label">我添加的钓点</span><span class="pref-val">${getUserSpots().length} 个</span></div>
+        <div class="pref-row" onclick="alert('已收藏'+getFavorites().length+'个钓点')"><span class="pref-label">我的收藏</span><span class="pref-val">${getFavorites().length} 个</span></div>
+      </div>
+      <div style="font-size:11px;color:#bbb;margin-top:14px;line-height:1.5;text-align:center;">
+        数据来源：Open-Meteo 开源天气 API · 高德地图<br>
+        ${wd&&wd._demo?"当前使用模拟数据 · ":""}v5.2 · 共享钓点 · 首页定位 · 图标Tab
+      </div>`;
+  }
+}
+
+// ===================================================================
+//  地图功能
+// ===================================================================
+async function initAMap(spots,nearbySpots){
+  const container=document.getElementById("amapContainer");
+  if(!container)return;
+  try{
+    const AMap=await loadAMap();container.innerHTML="";
+    const coord=userLocation||CITY_COORDS[currentCity];
+    const map=new AMap.Map(container,{
+      zoom:userLocation?12:(currentCity==="杭州"?10:currentCity==="武汉"?10:11),
+      center:userLocation?[userLocation.lon,userLocation.lat]:[coord.lon,coord.lat],
+      mapStyle:"amap://styles/light",resizeEnable:true,
+    });
+    amapMap=map;window._markerByName={};
+
+    // 用户定位标记
+    if(userLocation){
+      const userContent=`<div style="position:relative;width:20px;height:20px;"><div style="width:14px;height:14px;border-radius:50%;background:rgba(74,144,217,0.3);border:2.5px solid #4A90D9;position:absolute;top:3px;left:3px;"></div></div>`;
+      const userMarker=new AMap.Marker({position:[userLocation.lon,userLocation.lat],content:userContent,offset:new AMap.Pixel(-10,-10),zIndex:200,clickable:false});
+      userMarker.setMap(map);
+    }
+
+    const displaySpots=nearbySpots&&nearbySpots.length>0?nearbySpots:spots;
+    const favs=getFavorites();
+
+    displaySpots.forEach((s,i)=>{
+      const idx=calcIndex(currentFish,weatherData);
+      const isF=favs.includes(s.name);
+      let cls="";const idxColor=idx.score>=80?"#52C41A":idx.score>=65?"#4A90D9":idx.score>=45?"#FAAD14":"#F5222D";
+      const markerContent=`<div style="width:36px;height:36px;border-radius:50%;border:2.5px solid ${idxColor};background:${idxColor}33;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.3);transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,0.3);">${isF?"":""}${s.name.slice(0,2)}</div>`;
+      const marker=new AMap.Marker({position:[s.lon,s.lat],content:markerContent,offset:new AMap.Pixel(-18,-18),zIndex:100+i});
+      const distStr=s.dist!==undefined?(s.dist<1?Math.round(s.dist*1000)+"m":s.dist.toFixed(1)+"km"):"";
+      const parkingLabel=s.parking==="free"?"免费停车":s.parking==="paid"?"收费停车":"不可停车";
+      const commentCount=(getComments()[s.id]||[]).length;
+
+      const infoContent=`<div style="padding:4px 2px;min-width:180px;">
+        <div style="font-size:14px;font-weight:bold;margin-bottom:4px;">${isF?"":""}${s.name}</div>
+        <div style="font-size:11px;color:#999;margin-bottom:6px;">${s.addr}</div>
+        ${distStr?`<div style="font-size:11px;color:#4A90D9;margin-bottom:4px;">${distStr}</div>`:""}
+        <div style="font-size:11px;color:#666;margin-bottom:6px;">${s.desc}</div>
+        <div style="display:flex;gap:4px;margin-bottom:4px;">${s.tags.map(t=>`<span style="font-size:10px;padding:2px 6px;border-radius:8px;background:#f0f0f0;color:#888;">${t}</span>`).join("")}</div>
+        <div style="font-size:11px;color:#666;margin-bottom:4px;">${parkingLabel} ${s.parkingFee||""}${commentCount>0?' · '+commentCount+'条评论':''}</div>
+        <div style="font-size:12px;background:#F6FFED;padding:4px 8px;border-radius:6px;margin-bottom:4px;">${currentFish} 今日指数：<b style="color:${idx.color};">${idx.score}分 (${idx.level})</b></div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="https://uri.amap.com/navigation?to=${s.lon},${s.lat},${encodeURIComponent(s.name)}&mode=car&callnative=1" target="_blank" style="font-size:11px;color:#4A90D9;text-decoration:none;">导航 &rarr;</a>
+          <span onclick="toggleFavorite('${s.name.replace(/'/g,"\\'")}');" style="font-size:11px;cursor:pointer;color:#E67E22;">${isF?"已收藏":"收藏"}</span>
+          <span onclick="document.querySelectorAll('.amap-info-content').forEach(x=>x.parentElement&&x.parentElement.parentElement&&x.parentElement.parentElement.remove());openSpotDetail(${JSON.stringify(s).replace(/"/g,'&quot;')})" style="font-size:11px;cursor:pointer;color:#4A90D9;">详情</span>
+        </div>
+      </div>`;
+
+      marker.on("click",()=>{
+        const infoWin=new AMap.InfoWindow({content:infoContent,offset:new AMap.Pixel(0,-42)});
+        infoWin.open(map,marker.getPosition());
+      });
+      marker.setMap(map);
+      window._markerByName[s.name]=marker;
+    });
+
+    if(displaySpots.length>0){
+      if(userLocation){map.setZoomAndCenter(12,[userLocation.lon,userLocation.lat]);}
+      else{map.setFitView(null,false,[60,60,60,240]);}
+    }
+  }catch(e){
+    console.error("地图加载失败:",e);
+    const c=document.getElementById("amapContainer");
+    if(c)c.innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:13px;text-align:center;">地图加载失败：${e.message}<br><small>请检查高德 Key 是否已配置 Web端(JS API) 服务</small></div>`;
+  }
+}
+
+function focusSpot(spotName){
+  const allSpots=FISHING_SPOTS[currentCity]||[];
+  const s=allSpots.find(x=>x.name===spotName);
+  if(!s||!amapMap)return;
+  amapMap.setZoomAndCenter(13,[s.lon,s.lat]);
+  if(window._markerByName&&window._markerByName[spotName]){
+    setTimeout(()=>{window._markerByName[spotName].emit("click");},400);
+  }
+}
+
+function navigateToSpot(lat,lon,name){
+  window.open(`https://uri.amap.com/navigation?to=${lon},${lat},${encodeURIComponent(name)}&mode=car&callnative=1`,"_blank");
+}
+
+// ===================================================================
+//  交互函数
+// ===================================================================
+function selectFish(k){currentFish=k;render();}
+function switchTab(i){currentTab=i;render();}
+function changeCity(c){currentCity=c;loadWeather();}
+function toggleNotif(i){notifications[i].on=!notifications[i].on;render();}
+
+// ===================================================================
+//  启动
+// ===================================================================
+getFullFishDB();
+loadWeather();
+</script>
+</body>
+</html>
