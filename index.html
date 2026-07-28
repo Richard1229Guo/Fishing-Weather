@@ -28,14 +28,14 @@ body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; 
 .idx-level { font-size:13px; font-weight:500; margin-bottom:8px; }
 .idx-fish { font-size:12px; color:#888; margin-bottom:10px; }
 .update-time { font-size:10px; color:rgba(255,255,255,0.6); }
-.weather-row { display:grid; grid-template-columns:repeat(5,1fr); gap:4px; margin:0 12px 10px; }
-.w-item { background:#fff; border-radius:8px; padding:8px 4px; text-align:center; border:0.5px solid rgba(0,0,0,0.15); }
-.w-val { font-size:15px; font-weight:500; color:#333; }
+.weather-row { display:grid; grid-template-columns:repeat(6,1fr); gap:3px; margin:0 12px 10px; }
+.w-item { background:#fff; border-radius:8px; padding:7px 3px; text-align:center; border:0.5px solid rgba(0,0,0,0.15); }
+.w-val { font-size:14px; font-weight:500; color:#333; }
 .w-label { font-size:10px; color:#999; margin-top:2px; }
 .detail-section { margin:0 12px 10px; background:#fff; border-radius:12px; padding:12px; border:0.5px solid rgba(0,0,0,0.15); }
 .detail-title { font-size:13px; font-weight:500; margin-bottom:10px; color:#333; }
 .bar-row { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
-.bar-label { font-size:11px; color:#888; width:28px; text-align:right; }
+.bar-label { font-size:11px; color:#888; width:52px; text-align:right; flex-shrink:0; }
 .bar-track { flex:1; height:8px; background:#f0f0f0; border-radius:4px; overflow:hidden; }
 .bar-fill { height:100%; border-radius:4px; transition:width 0.6s; }
 .bar-score { font-size:11px; width:30px; color:#888; }
@@ -481,24 +481,210 @@ function kmhToBeaufort(kmh){
   if(ms<7.9)return 4;if(ms<10.7)return 5;if(ms<13.8)return 6;if(ms<17.1)return 7;
   return 8;
 }
+// ===================================================================
+//  垂钓指数算法 v2.0 — 多因子综合评分
+//  数据源：Open-Meteo (温度/气压/风/湿度/云量/UV/天气代码/小时气压趋势/日温差)
+//  9因子加权 = 温度20 + 气压趋势18 + 溶氧15 + 风力10 + 天气10 + 降水7 + 温差5 + UV5 + 湿度5
+//  设计原则：钟形曲线评分(非平坦顶) + 气压趋势驱动 + 溶氧综合建模 + 极端条件硬封顶
+// ===================================================================
+
+// 温度评分：钟形曲线，适温区间内70~95分，区间外快速衰减
+function _tempScore(t,fishTemp){
+  var low=fishTemp[0],high=fishTemp[1],optimal=(low+high)/2,half=(high-low)/2;
+  if(t>=low&&t<=high){
+    var dist=half>0?Math.abs(t-optimal)/half:0;
+    return Math.round(95-dist*dist*25);
+  }
+  if(t<low) return Math.max(0,Math.round(65-(low-t)*10));
+  return Math.max(0,Math.round(65-(t-high)*8));
+}
+
+// 气压趋势评分：3h气压变化方向与幅度（钓鱼最关键因子之一）
+function _pressTrendScore(curP,hourlyPress){
+  if(!hourlyPress||!hourlyPress.time||hourlyPress.time.length<4){
+    if(curP>=1010&&curP<=1022) return 72;
+    if(curP>=1005&&curP<=1028) return 50;
+    return 35;
+  }
+  var now=new Date(),curH=now.getHours(),idx=0;
+  for(var i=0;i<hourlyPress.time.length;i++){
+    var h=new Date(hourlyPress.time[i]).getHours();
+    if(h<=curH) idx=i;
+    if(h===curH) break;
+  }
+  if(idx<3) return 60;
+  var past3h=hourlyPress.values[idx-3];
+  var trend=curP-past3h;
+  if(trend>0.5&&trend<=2.5) return 88;
+  if(trend>0&&trend<=0.5) return 78;
+  if(trend>=-0.5&&trend<=0) return 68;
+  if(trend>=-2.5&&trend<-0.5) return 42;
+  if(trend<-2.5) return 25;
+  if(trend>2.5) return 55;
+  return 60;
+}
+
+// 溶氧指数：温度(反相关)+风力(正相关)+云量(略正相关) 综合建模
+function _oxygenScore(temp,windLevel,cloud){
+  var s=65;
+  if(temp>32) s-=(temp-32)*5;
+  else if(temp>28) s-=(temp-28)*3;
+  else if(temp>=12&&temp<=22) s+=18;
+  else if(temp<5) s-=(5-temp)*4;
+  if(windLevel>=1&&windLevel<=3) s+=15;
+  else if(windLevel>=4&&windLevel<=5) s+=6;
+  else if(windLevel===0) s-=8;
+  if(cloud>=70) s+=10;
+  else if(cloud>=40) s+=5;
+  else if(cloud<=15) s-=6;
+  return Math.max(0,Math.min(100,Math.round(s)));
+}
+
+// 风力评分：1~3级最佳，0级偏弱，5级以上危险
+function _windScore(w,fishWind){
+  var low=fishWind[0],high=fishWind[1];
+  if(w>=low&&w<=high){
+    if(w>=1&&w<=3) return 88;
+    if(w===0) return 60;
+    return 72;
+  }
+  if(w>high) return Math.max(0,55-(w-high)*22);
+  if(w<low&&low>0) return Math.max(0,55-(low-w)*15);
+  return 50;
+}
+
+// 天气状况评分：WMO weather_code -> 钓鱼适宜度
+function _weatherCodeScore(code){
+  if(code==null) return 60;
+  if(code===0) return 50;
+  if(code===1) return 70;
+  if(code===2) return 78;
+  if(code===3) return 85;
+  if(code===45||code===48) return 58;
+  if(code>=51&&code<=53) return 72;
+  if(code===55) return 55;
+  if(code===61) return 65;
+  if(code===63) return 40;
+  if(code===65) return 20;
+  if(code===66||code===67) return 25;
+  if(code===71) return 55;
+  if(code===73) return 40;
+  if(code===75) return 25;
+  if(code===80) return 58;
+  if(code===81) return 42;
+  if(code===82) return 20;
+  if(code===85||code===86) return 38;
+  if(code===95) return 12;
+  if(code>=96) return 8;
+  return 50;
+}
+
+// 降水概率评分
+function _precipScore(rainProb,code){
+  if(code!=null){
+    if(code>=95) return 8;
+    if(code>=65) return 18;
+    if(code===63) return 40;
+  }
+  if(rainProb==null) return 60;
+  if(rainProb<=20) return 82;
+  if(rainProb<=40) return 65;
+  if(rainProb<=60) return 45;
+  if(rainProb<=80) return 28;
+  return 12;
+}
+
+// 日温差评分：温差小=稳定=好
+function _tempDiffScore(dMax,dMin){
+  if(dMax==null||dMin==null) return 60;
+  var diff=dMax-dMin;
+  if(diff<=5) return 82;
+  if(diff<=8) return 72;
+  if(diff<=12) return 55;
+  if(diff<=16) return 38;
+  return 22;
+}
+
+// UV指数评分：低UV更适合作钓
+function _uvScore(uv){
+  if(uv==null) return 60;
+  if(uv<=2) return 78;
+  if(uv<=5) return 62;
+  if(uv<=7) return 42;
+  if(uv<=10) return 28;
+  return 12;
+}
+
+// 湿度评分
+function _humScore(h,fishHum){
+  var low=fishHum[0],high=fishHum[1],optimal=(low+high)/2,half=(high-low)/2;
+  if(h>=low&&h<=high){
+    var dist=half>0?Math.abs(h-optimal)/half:0;
+    return Math.round(80-dist*15);
+  }
+  if(h<low) return Math.max(0,55-(low-h)*2);
+  return Math.max(0,55-(h-high)*2);
+}
+
+// 主评分函数
 function calcIndex(fishKey,wd){
-  const f=FISH_DB[fishKey];
-  if(!wd)return{score:0,details:[],level:"--",color:"#999"};
-  const t=wd.temp,p=wd.press,w=wd.windLevel,h=wd.hum,r=wd.rainProb;
-  let score=0,details=[];
-  let ts=(t>=f.temp[0]&&t<=f.temp[1])?100:(t<f.temp[0])?Math.max(0,100-(f.temp[0]-t)*12):Math.max(0,100-(t-f.temp[1])*8);
-  score+=ts*f.temp[2]/100;details.push({label:"温度",val:ts,w:f.temp[2]});
-  let ps=(p>=f.press[0]&&p<=f.press[1])?100:(p<f.press[0])?Math.max(0,100-(f.press[0]-p)*10):Math.max(0,100-(p-f.press[1])*8);
-  score+=ps*f.press[2]/100;details.push({label:"气压",val:ps,w:f.press[2]});
-  let ws=(w>f.wind[1])?Math.max(0,100-(w-f.wind[1])*25):(w<f.wind[0]&&f.wind[0]>0)?Math.max(0,100-(f.wind[0]-w)*15):100;
-  score+=ws*f.wind[2]/100;details.push({label:"风力",val:ws,w:f.wind[2]});
-  let hs=(h>=f.hum[0]&&h<=f.hum[1])?100:(h<f.hum[0])?Math.max(0,100-(f.hum[0]-h)*3):Math.max(0,100-(h-f.hum[1])*3);
-  score+=hs*f.hum[2]/100;details.push({label:"湿度",val:hs,w:f.hum[2]});
-  let rs=r<=20?100:Math.max(0,100-r*3);
-  score+=rs*15/100;details.push({label:"降水",val:rs,w:15});
+  var f=FISH_DB[fishKey];
+  if(!wd) return {score:0,details:[],level:"--",color:"#999",summary:""};
+  var t=wd.temp,p=wd.press,w=wd.windLevel,h=wd.hum,r=wd.rainProb;
+  var cloud=wd.cloud!=null?wd.cloud:50;
+  var code=wd.weatherCode!=null?wd.weatherCode:2;
+  var uv=wd.uvIndex!=null?wd.uvIndex:5;
+  var dMax=wd.daily?wd.daily.temperature_2m_max:null;
+  var dMin=wd.daily?wd.daily.temperature_2m_min:null;
+  dMax=Array.isArray(dMax)?dMax[0]:dMax;
+  dMin=Array.isArray(dMin)?dMin[0]:dMin;
+  var hp=wd.hourlyPress||null;
+
+  var ts=_tempScore(t,f.temp);
+  var pts=_pressTrendScore(p,hp);
+  var os=_oxygenScore(t,w,cloud);
+  var ws=_windScore(w,f.wind);
+  var wcs=_weatherCodeScore(code);
+  var ps=_precipScore(r,code);
+  var tds=_tempDiffScore(dMax,dMin);
+  var uvs=_uvScore(uv);
+  var hs=_humScore(h,f.hum);
+
+  var W={temp:20,press:18,oxygen:15,wind:10,weather:10,precip:7,tempDiff:5,uv:5,hum:5};
+  var details=[
+    {label:"温度",val:ts,w:W.temp},
+    {label:"气压趋势",val:pts,w:W.press},
+    {label:"溶氧",val:os,w:W.oxygen},
+    {label:"风力",val:ws,w:W.wind},
+    {label:"天气",val:wcs,w:W.weather},
+    {label:"降水",val:ps,w:W.precip},
+    {label:"温差",val:tds,w:W.tempDiff},
+    {label:"紫外线",val:uvs,w:W.uv},
+    {label:"湿度",val:hs,w:W.hum}
+  ];
+  var score=0;
+  for(var i=0;i<details.length;i++) score+=details[i].val*details[i].w/100;
   score=Math.round(Math.min(100,Math.max(0,score)));
-  return{score,details,level:score>=80?"极佳":score>=65?"适宜":score>=45?"一般":"不宜",
-    color:score>=80?"#52C41A":score>=65?"#4A90D9":score>=45?"#FAAD14":"#F5222D"};
+
+  // 硬性封顶：极端条件不计高分
+  if(t<3||t>37) score=Math.min(score,28);
+  if(w>=7) score=Math.min(score,22);
+  if(code>=95) score=Math.min(score,15);
+  if(code===65||code===82) score=Math.min(score,30);
+
+  var level,color,summary;
+  if(score>=75){level="极佳";color="#52C41A";
+    summary="多项指标优良，"+(f.layer==="底栖"?"底栖鱼活跃觅食":f.layer==="上层"?"上层鱼积极追饵":"中层鱼开口良好")+"，适宜出钓。";
+  }else if(score>=58){level="适宜";color="#4A90D9";
+    summary="总体条件尚可，注意选择合适时段和钓位。";
+  }else if(score>=40){level="一般";color="#FAAD14";
+    summary="条件一般，鱼口可能偏少，需耐心守钓。";
+  }else if(score>=25){level="较差";color="#FF7A45";
+    summary="多项指标不利，建议谨慎出钓或更换目标鱼种。";
+  }else{level="不宜";color="#F5222D";
+    summary="天气条件恶劣，不建议出钓。";
+  }
+  return {score:score,details:details,level:level,color:color,summary:summary};
 }
 
 // ===================================================================
@@ -506,24 +692,36 @@ function calcIndex(fishKey,wd){
 // ===================================================================
 async function fetchWeather(city,lat,lon){
   const coord=(lat!=null&&lon!=null)?{lat,lon}:(CITY_COORDS[city]||CITY_COORDS["杭州"]);
-  const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lon}&current=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max&timezone=Asia/Shanghai&forecast_days=3`;
+  const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lon}`+
+    `&current=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code,uv_index,wind_gusts_10m`+
+    `&hourly=pressure_msl`+
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,uv_index_max`+
+    `&timezone=Asia/Shanghai&forecast_days=3`;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),12000);
   try{
     const resp=await fetch(url,{signal:controller.signal});clearTimeout(timeout);
     if(!resp.ok)throw new Error("天气API请求失败");
     const json=await resp.json();const c=json.current;
+    var hourlyPress=null;
+    if(json.hourly&&json.hourly.pressure_msl){
+      hourlyPress={time:json.hourly.time,values:json.hourly.pressure_msl};
+    }
     return{temp:Math.round(c.temperature_2m*10)/10,press:Math.round(c.pressure_msl*10)/10,
       hum:c.relative_humidity_2m,windSpeed:c.wind_speed_10m,windLevel:kmhToBeaufort(c.wind_speed_10m),
       rainProb:c.precipitation_probability,cloud:c.cloud_cover,weatherCode:c.weather_code,
-      updateTime:c.time,daily:json.daily};
+      uvIndex:c.uv_index,windGusts:c.wind_gusts_10m,
+      updateTime:c.time,daily:json.daily,hourlyPress:hourlyPress};
   }catch(e){clearTimeout(timeout);throw e;}
 }
 function getDemoWeather(city){
-  const base={"杭州":{temp:27,press:1012,hum:65,wind:8,rain:15,code:2},"北京":{temp:30,press:1008,hum:45,wind:12,rain:5,code:1},"上海":{temp:26,press:1014,hum:72,wind:10,rain:25,code:3},"广州":{temp:32,press:1005,hum:80,wind:6,rain:40,code:3},"成都":{temp:25,press:1010,hum:70,wind:5,rain:30,code:2},"武汉":{temp:29,press:1011,hum:68,wind:9,rain:20,code:2},"南京":{temp:28,press:1013,hum:62,wind:11,rain:15,code:2},"长沙":{temp:28,press:1010,hum:70,wind:7,rain:35,code:3},"重庆":{temp:28,press:1007,hum:75,wind:6,rain:30,code:3},"西安":{temp:30,press:1009,hum:50,wind:8,rain:10,code:1}};
+  const base={"杭州":{temp:27,press:1012,hum:65,wind:8,rain:15,code:2,cloud:55,uv:5},"北京":{temp:30,press:1008,hum:45,wind:12,rain:5,code:1,cloud:30,uv:7},"上海":{temp:26,press:1014,hum:72,wind:10,rain:25,code:3,cloud:80,uv:3},"广州":{temp:32,press:1005,hum:80,wind:6,rain:40,code:3,cloud:75,uv:4},"成都":{temp:25,press:1010,hum:70,wind:5,rain:30,code:2,cloud:60,uv:4},"武汉":{temp:29,press:1011,hum:68,wind:9,rain:20,code:2,cloud:50,uv:5},"南京":{temp:28,press:1013,hum:62,wind:11,rain:15,code:2,cloud:45,uv:6},"长沙":{temp:28,press:1010,hum:70,wind:7,rain:35,code:3,cloud:70,uv:4},"重庆":{temp:28,press:1007,hum:75,wind:6,rain:30,code:3,cloud:65,uv:4},"西安":{temp:30,press:1009,hum:50,wind:8,rain:10,code:1,cloud:25,uv:7}};
   const d=base[city]||base["杭州"];
   return{temp:d.temp,press:d.press,hum:d.hum,windSpeed:d.wind,windLevel:kmhToBeaufort(d.wind),
-    rainProb:d.rain,cloud:50,weatherCode:d.code,updateTime:new Date().toISOString(),daily:null,_demo:true};
+    rainProb:d.rain,cloud:d.cloud,weatherCode:d.code,uvIndex:d.uv,windGusts:Math.round(d.wind*1.3),
+    updateTime:new Date().toISOString(),
+    daily:{temperature_2m_max:[d.temp+3],temperature_2m_min:[d.temp-5],precipitation_sum:[0],precipitation_probability_max:[d.rain],uv_index_max:[d.uv+2]},
+    hourlyPress:null,_demo:true};
 }
 
 // ===================================================================
@@ -806,7 +1004,8 @@ function render(){
       <div class="w-item"><div class="w-val">${wd.temp}°</div><div class="w-label">气温</div></div>
       <div class="w-item"><div class="w-val">${wd.press}</div><div class="w-label">气压</div></div>
       <div class="w-item"><div class="w-val">${wd.windLevel}级</div><div class="w-label">风力</div></div>
-      <div class="w-item"><div class="w-val">${wd.hum}%</div><div class="w-label">湿度</div></div>
+      <div class="w-item"><div class="w-val">${wd.cloud!=null?wd.cloud:0}%</div><div class="w-label">云量</div></div>
+      <div class="w-item"><div class="w-val">${wd.uvIndex!=null?wd.uvIndex:0}</div><div class="w-label">UV</div></div>
       <div class="w-item"><div class="w-val">${wd.rainProb}%</div><div class="w-label">降水</div></div>
     </div>`:""}
     <div class="tab-bar">
@@ -831,7 +1030,7 @@ function renderTabContent(result){
     el.innerHTML=wd?`
       <div class="detail-section">
         <div class="detail-title">${currentFish} · 各因子评分明细</div>
-        ${result.details.map(d=>{const c=d.val>=80?"#52C41A":d.val>=60?"#4A90D9":d.val>=40?"#FAAD14":"#F5222D";return`<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${d.val}%;background:${c}"></div></div><div class="bar-score" style="color:${c}">${Math.round(d.val)}</div></div>`;}).join("")}
+        ${result.details.map(d=>{const c=d.val>=75?"#52C41A":d.val>=55?"#4A90D9":d.val>=35?"#FAAD14":"#F5222D";return`<div class="bar-row"><div class="bar-label">${d.label}</div><div class="bar-track"><div class="bar-fill" style="width:${d.val}%;background:${c}"></div></div><div class="bar-score" style="color:${c}">${Math.round(d.val)}</div></div>`;}).join("")}
       </div>
       <div class="detail-section">
         <div class="detail-title">${currentFish}习性参数</div>
@@ -844,7 +1043,7 @@ function renderTabContent(result){
       </div>
       <div class="advice-box">
         <div style="font-weight:500;margin-bottom:4px;color:#1976D2;">今日作钓建议</div>
-        ${result.score>=80?`今日${currentFish}指数极佳！气温${wd.temp}°C在最佳区间，气压${wd.press}hPa稳定。建议${f.layer==="底栖"?"选深水区底部守钓":f.layer==="上层"?"上层浮钓，找接口":"中层找接口钓法"}，早6–9点、晚16–19点为黄金时段。`:result.score>=65?`今日${currentFish}指数适宜。注意${result.details.sort((a,b)=>a.val-b.val)[0].label}偏低，建议调整钓位或钓深。`:`今日${currentFish}指数一般，${result.details.sort((a,b)=>a.val-b.val)[0].label}不理想，建议${result.score<45?"改日再钓":"谨慎出钓，选背风位置"}。`}
+        ${result.summary} ${result.score>=58?`建议${f.layer==="底栖"?"选深水区底部守钓，关注气压趋势变化":f.layer==="上层"?"上层浮钓找接口，注意溶氧与风力":"中层找接口钓法"}，早6–9点、晚16–19点为黄金时段。`:result.score>=40?`最弱项为${[...result.details].sort((a,b)=>a.val-b.val)[0].label}，建议调整钓位或钓深。`:`最弱项为${[...result.details].sort((a,b)=>a.val-b.val)[0].label}，建议${result.score<25?"改日再钓":"谨慎出钓，选背风位置"}。`}
       </div>
     `:`<div class="loading-mask">等待天气数据...</div>`;
 
@@ -853,9 +1052,9 @@ function renderTabContent(result){
     const allResults=Object.keys(FISH_DB).map(k=>({name:k,...calcIndex(k,wd)}));
     const best=allResults.sort((a,b)=>b.score-a.score);
     el.innerHTML=`
-      <div style="font-size:12px;color:#888;margin-bottom:10px;">今日各鱼种垂钓指数对比（点击切换主选鱼种）</div>
+      <div style="font-size:12px;color:#888;margin-bottom:10px;">今日各鱼种垂钓指数对比 · 9因子综合评分（点击切换）</div>
       <div class="compare-grid">
-        ${best.map((r,i)=>`<div class="compare-card ${r.name===currentFish?'selected':''}" onclick="selectFish('${r.name}')" style="border-color:${r.name===currentFish?FISH_DB[r.name].color:'rgba(0,0,0,0.15)'};border-width:${r.name===currentFish?1.5:0.5}px;"><div style="font-size:11px;color:#999;">${i===0?"":i===1?"":i===2?"":""} ${r.name}</div><div class="compare-idx" style="color:${r.color}">${r.score}</div><div class="compare-name" style="color:${r.color}">${r.level}</div></div>`).join("")}
+        ${best.map((r,i)=>`<div class="compare-card ${r.name===currentFish?'selected':''}" onclick="selectFish('${r.name}')" style="border-color:${r.name===currentFish?FISH_DB[r.name].color:'rgba(0,0,0,0.15)'};border-width:${r.name===currentFish?1.5:0.5}px;"><div style="font-size:11px;color:#999;">${i===0?"🥇":i===1?"🥈":i===2?"🥉":""} ${r.name}</div><div class="compare-idx" style="color:${r.color}">${r.score}</div><div class="compare-name" style="color:${r.color}">${r.level}</div></div>`).join("")}
       </div>
       <div class="chart-wrap">
         <div class="detail-title">各鱼种指数柱状图</div>
@@ -1001,7 +1200,7 @@ async function initAMap(spots,nearbySpots){
     displaySpots.forEach((s,i)=>{
       const idx=calcIndex(currentFish,weatherData);
       const isF=favs.includes(s.name);
-      let cls="";const idxColor=idx.score>=80?"#52C41A":idx.score>=65?"#4A90D9":idx.score>=45?"#FAAD14":"#F5222D";
+      let cls="";const idxColor=idx.color||"#999";
       const markerContent=`<div style="width:36px;height:36px;border-radius:50%;border:2.5px solid ${idxColor};background:${idxColor}33;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.3);transform:translate(-50%,-50%);box-shadow:0 1px 4px rgba(0,0,0,0.3);">${isF?"":""}${s.name.slice(0,2)}</div>`;
       const marker=new AMap.Marker({position:[s.lon,s.lat],content:markerContent,offset:new AMap.Pixel(-18,-18),zIndex:100+i});
       const distStr=s.dist!==undefined?(s.dist<1?Math.round(s.dist*1000)+"m":s.dist.toFixed(1)+"km"):"";
