@@ -40,9 +40,9 @@ body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; 
 .bar-fill { height:100%; border-radius:4px; transition:width 0.6s; }
 .bar-score { font-size:11px; width:30px; color:#888; }
 .tab-bar { display:flex; border-top:0.5px solid rgba(0,0,0,0.15); background:#fff; position:fixed; bottom:0; left:50%; transform:translateX(-50%); width:380px; z-index:100; border-radius:0 0 16px 16px; box-shadow:0 -2px 10px rgba(0,0,0,0.06); }
-.tab-item { flex:1; text-align:center; padding:7px 0 6px; font-size:10px; color:#999; cursor:pointer; border:none; background:none; font-family:inherit; }
+.tab-item { flex:1; text-align:center; padding:5px 0 4px; font-size:9px; color:#999; cursor:pointer; border:none; background:none; font-family:inherit; }
 .tab-item.active { color:#4A90D9; }
-.tab-icon { font-size:16px; display:block; margin-bottom:1px; }
+.tab-icon { font-size:14px; display:block; margin-bottom:1px; }
 .tab-content { padding:12px; padding-bottom:56px; }
 .loading-mask { display:flex; align-items:center; justify-content:center; padding:40px 0; font-size:13px; color:#999; }
 .error-msg { background:#fff3f3; color:#c33; padding:10px 12px; border-radius:8px; font-size:12px; margin:0 12px 10px; }
@@ -74,6 +74,29 @@ body { font-family: -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; 
 .hourly-legend { display:flex; gap:12px; font-size:10px; color:#bbb; margin-top:6px; justify-content:center; }
 .hourly-legend span { display:flex; align-items:center; gap:3px; }
 .hourly-legend .hldot { width:8px; height:8px; border-radius:2px; flex-shrink:0; }
+/* ========== 一周预测 ========== */
+.week-section { margin-top:6px; }
+.week-card { display:flex; align-items:center; gap:10px; background:#fff; border-radius:10px; padding:10px 12px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.12); cursor:pointer; transition:border-color .2s; }
+.week-card:hover { border-color:#4A90D9; }
+.week-card.today { border-color:#4A90D9; border-width:1.5px; background:linear-gradient(135deg,#EBF3FC 0%,#fff 100%); }
+.week-date { min-width:52px; text-align:center; }
+.week-day { font-size:11px; color:#888; }
+.week-date-num { font-size:13px; font-weight:500; color:#333; }
+.week-emoji { font-size:22px; width:30px; text-align:center; }
+.week-info { flex:1; min-width:0; }
+.week-temp { font-size:11px; color:#666; }
+.week-temp span { color:#F5222D; font-weight:500; margin:0 3px; }
+.week-cond { font-size:10px; color:#999; }
+.week-score-side { text-align:center; min-width:40px; }
+.week-score-num { font-size:22px; font-weight:500; line-height:1; }
+.week-score-lvl { font-size:10px; margin-top:1px; }
+.week-detail-panel { background:#f8f9fa; border-radius:8px; padding:8px 10px; margin-top:-2px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.08); display:none; }
+.week-detail-bar { display:flex; align-items:center; gap:6px; margin:3px 0; }
+.week-detail-bar .wdb-label { font-size:9px; color:#888; width:32px; text-align:right; flex-shrink:0; }
+.week-detail-bar .wdb-track { flex:1; height:5px; background:#eee; border-radius:3px; overflow:hidden; }
+.week-detail-bar .wdb-fill { height:100%; border-radius:3px; transition:width .3s; }
+.week-detail-bar .wdb-val { font-size:9px; font-weight:500; width:22px; text-align:right; flex-shrink:0; }
+.week-summary { font-size:10px; color:#888; margin-top:6px; line-height:1.5; }
 .map-container { height:340px; border-radius:12px; overflow:hidden; margin-bottom:10px; border:0.5px solid rgba(0,0,0,0.15); position:relative; }
 .map-container #amapContainer { width:100%; height:100%; }
 .spot-list-item { display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:8px; padding:10px 12px; margin-bottom:6px; border:0.5px solid rgba(0,0,0,0.15); cursor:pointer; }
@@ -712,8 +735,8 @@ async function fetchWeather(city,lat,lon){
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lon}`+
     `&current=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code,uv_index,wind_gusts_10m`+
     `&hourly=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code,uv_index`+
-    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,uv_index_max`+
-    `&timezone=Asia/Shanghai&forecast_days=3`;
+    `&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,uv_index_max,weather_code,wind_speed_10m_max`+
+    `&timezone=Asia/Shanghai&forecast_days=7`;
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),12000);
   try{
@@ -755,11 +778,27 @@ function getDemoWeather(city){
   }
   const hourly={time:hTimes,temperature_2m:hTemp,pressure_msl:hPress,relative_humidity_2m:hHum,
     wind_speed_10m:hWind,precipitation_probability:hRain,cloud_cover:hCloud,weather_code:hCode,uv_index:hUV};
+  // 生成7日模拟每日预报
+  const dTimes=[],dMax=[],dMin=[],dPSum=[],dProb=[],dUV=[],dWC=[],dWind=[];
+  for(let i=0;i<7;i++){
+    const day=new Date(now);day.setDate(day.getDate()+i);
+    dTimes.push(day.toISOString().slice(0,10));
+    // 每日略有波动
+    const variation=Math.sin(i*1.1)*3;
+    dMax.push(d.temp+3+Math.round(variation));
+    dMin.push(d.temp-5+Math.round(variation*0.8));
+    dPSum.push(i%3===0?Math.round(d.rain*0.3):Math.round(d.rain*0.1*(Math.random())));
+    dProb.push(Math.max(0,Math.min(90,d.rain+Math.round(variation*2))));
+    dUV.push(Math.max(0,Math.min(11,d.uv+Math.round(Math.sin(i*0.8)*3))));
+    dWC.push(d.code+(i%4===1?1:0));
+    dWind.push(Math.max(2,Math.min(20,d.wind+Math.round(variation*0.6))));
+  }
+  const daily={time:dTimes,temperature_2m_max:dMax,temperature_2m_min:dMin,precipitation_sum:dPSum,
+    precipitation_probability_max:dProb,uv_index_max:dUV,weather_code:dWC,wind_speed_10m_max:dWind};
   return{temp:d.temp,press:d.press,hum:d.hum,windSpeed:d.wind,windLevel:kmhToBeaufort(d.wind),
     rainProb:d.rain,cloud:d.cloud,weatherCode:d.code,uvIndex:d.uv,windGusts:Math.round(d.wind*1.3),
     updateTime:new Date().toISOString(),
-    daily:{temperature_2m_max:[d.temp+3],temperature_2m_min:[d.temp-5],precipitation_sum:[0],precipitation_probability_max:[d.rain],uv_index_max:[d.uv+2]},
-    hourlyPress:null,hourly:hourly,_demo:true};
+    daily:daily,hourlyPress:null,hourly:hourly,_demo:true};
 }
 
 // ===================================================================
@@ -1047,7 +1086,7 @@ function render(){
       <div class="w-item"><div class="w-val">${wd.rainProb}%</div><div class="w-label">降水</div></div>
     </div>`:""}
     <div class="tab-bar">
-      ${["天气指数","鱼种对比","共享钓点","我的"].map((t,i)=>`<button class="tab-item ${i===currentTab?'active':''}" onclick="switchTab(${i})"><span class="tab-icon">${["☀️","🐟","📍","👤"][i]}</span>${t}</button>`).join("")}
+      ${["天气指数","鱼种对比","一周预测","共享钓点","我的"].map((t,i)=>`<button class="tab-item ${i===currentTab?'active':''}" onclick="switchTab(${i})"><span class="tab-icon">${["☀️","🐟","📅","📍","👤"][i]}</span>${t}</button>`).join("")}
     </div>
     <div class="tab-content" id="tabContent"></div>`;
   renderTabContent(result);
@@ -1071,9 +1110,10 @@ function renderHourlyIndex(wd,fishKey){
   if(!wd||!wd.hourly||!wd.hourly.time||wd.hourly.time.length<2)return"";
   const h=wd.hourly,now=new Date();
   const nowISO=now.toISOString().slice(0,13);
-  // 找到当前小时起始索引
-  let start=0;for(let i=0;i<h.time.length;i++){if(h.time[i].slice(0,13)>=nowISO){start=i;break;}}
-  const end=Math.min(start+24,h.time.length);
+  // 以当前小时为中心，前2后19（共约22小时）
+  let nowIdx=0;for(let i=0;i<h.time.length;i++){if(h.time[i].slice(0,13)>=nowISO){nowIdx=i;break;}}
+  const start=Math.max(0,nowIdx-2);
+  const end=Math.min(start+22,h.time.length);
   if(end-start<2)return"";
   let cards="",bestH=start,bestS=0;
   for(let i=start;i<end;i++){
@@ -1094,10 +1134,10 @@ function renderHourlyIndex(wd,fishKey){
       <div class="h-wind">${wh.windLevel}级风</div>
     </div>`;
   }
-  // 自动滚动到最佳时段
-  setTimeout(()=>{const s=document.getElementById("hourlyScroll");if(s){const c=s.children[bestH-start];if(c)c.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});}},400);
+  // 自动滚动到当前时段
+  setTimeout(()=>{const s=document.getElementById("hourlyScroll");if(s){const c=s.children[nowIdx-start];if(c)c.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});}},400);
   return `<div class="hourly-section">
-    <div class="detail-title">📊 逐小时垂钓指数 <span style="font-size:10px;color:#bbb;font-weight:400;">（滑动查看24小时）</span></div>
+    <div class="detail-title">📊 逐小时垂钓指数 <span style="font-size:10px;color:#bbb;font-weight:400;">（滑动查看前后时段）</span></div>
     <div class="hourly-scroll" id="hourlyScroll">${cards}</div>
     <div class="hourly-legend">
       <span><span class="hldot" style="background:#52C41A"></span>极佳 ≥75</span>
@@ -1131,6 +1171,82 @@ function showHourlyClick(card,fishKey,hourIdx){
     detailSec.style.display="block";
     detailSec.scrollIntoView({behavior:"smooth",block:"nearest"});
   }
+}
+
+// ===================================================================
+//  一周预测
+// ===================================================================
+function renderWeekForecast(wd,fishKey){
+  if(!wd||!wd.daily||!wd.daily.time||wd.daily.time.length<2)return`<div class="loading-mask">暂无7日预报数据</div>`;
+  const d=wd.daily;const now=new Date();
+  const todayStr=now.toISOString().slice(0,10);
+  const weekNames=["周日","周一","周二","周三","周四","周五","周六"];
+  let html=`<div class="week-section">
+    <div class="detail-title">📅 ${currentFish} · 7日垂钓指数预测</div>`;
+
+  let bestScore=0,bestDay=-1;
+  for(let i=0;i<Math.min(7,d.time.length);i++){
+    const dateStr=d.time[i];
+    const date=new Date(dateStr);
+    const isToday=dateStr===todayStr;
+    // 构造该日的天气对象用于 calcIndex
+    const dayTemp=(d.temperature_2m_max[i]+d.temperature_2m_min[i])/2;
+    const dayWind=kmhToBeaufort(d.wind_speed_10m_max?d.wind_speed_10m_max[i]:8);
+    const dayRain=d.precipitation_probability_max?d.precipitation_probability_max[i]:0;
+    const dayUV=d.uv_index_max?d.uv_index_max[i]:5;
+    const dayWC=d.weather_code?d.weather_code[i]:2;
+    // 估算云量：基于天气码和降水概率
+    let estCloud=50;
+    if(dayWC===0)estCloud=10;else if(dayWC===1)estCloud=30;else if(dayWC===2)estCloud=55;
+    else if(dayWC===3)estCloud=85;else if(dayWC>=45&&dayWC<=48)estCloud=90;
+    else if(dayWC>=51&&dayWC<=55)estCloud=70;else if(dayWC>=61&&dayWC<=65)estCloud=80;
+    else if(dayWC>=80&&dayWC<=82)estCloud=75;else if(dayWC>=95)estCloud=95;
+    // 估算湿度：基于降水概率
+    const estHum=Math.min(95,Math.max(30,50+dayRain*0.4));
+    const dw={temp:Math.round(dayTemp*10)/10,press:wd.press,hum:Math.round(estHum),
+      windSpeed:d.wind_speed_10m_max?d.wind_speed_10m_max[i]:8,windLevel:dayWind,
+      rainProb:dayRain,cloud:estCloud,weatherCode:dayWC,uvIndex:dayUV,
+      daily:{temperature_2m_max:[d.temperature_2m_max[i]],temperature_2m_min:[d.temperature_2m_min[i]]},
+      hourlyPress:null};
+    const r=calcIndex(fishKey,dw);
+    if(r.score>bestScore){bestScore=r.score;bestDay=i;}
+    const dayName=isToday?"今天":(i===1?"明天":weekNames[date.getDay()]);
+    html+=`<div class="week-card${isToday?' today':''}" onclick="toggleWeekDetail(${i})" id="weekCard${i}">
+      <div class="week-date">
+        <div class="week-day">${dayName}</div>
+        <div class="week-date-num">${dateStr.slice(5)}</div>
+      </div>
+      <div class="week-emoji">${getWeatherEmoji(dayWC)}</div>
+      <div class="week-info">
+        <div class="week-temp">${Math.round(d.temperature_2m_min[i])}° <span>~</span> ${Math.round(d.temperature_2m_max[i])}°</div>
+        <div class="week-cond">${getWeatherDesc(dayWC)} · ${dayWind}级风 · 降水${dayRain}%</div>
+      </div>
+      <div class="week-score-side">
+        <div class="week-score-num" style="color:${r.color}">${r.score}</div>
+        <div class="week-score-lvl" style="color:${r.color}">${r.level}</div>
+      </div>
+    </div>
+    <div class="week-detail-panel" id="weekDetail${i}">
+      <div style="font-size:11px;color:#666;margin-bottom:6px;">${dayName} ${currentFish}垂钓指数明细</div>
+      ${r.details.map(dd=>{
+        const c=dd.val>=75?"#52C41A":dd.val>=55?"#4A90D9":dd.val>=35?"#FAAD14":"#F5222D";
+        return`<div class="week-detail-bar"><div class="wdb-label">${dd.label}</div><div class="wdb-track"><div class="wdb-fill" style="width:${dd.val}%;background:${c}"></div></div><div class="wdb-val" style="color:${c}">${Math.round(dd.val)}</div></div>`;
+      }).join("")}
+      <div class="week-summary">${r.summary}</div>
+    </div>`;
+  }
+  html+=`</div>`;
+  // 自动展开今天
+  setTimeout(()=>{
+    const td=document.getElementById("weekDetail0");
+    if(td)td.style.display="block";
+  },100);
+  return html;
+}
+function toggleWeekDetail(idx){
+  const panel=document.getElementById("weekDetail"+idx);
+  if(!panel)return;
+  panel.style.display=panel.style.display==="block"?"none":"block";
 }
 
 function renderTabContent(result){
@@ -1202,7 +1318,7 @@ function renderTabContent(result){
     }
     requestAnimationFrame(()=>requestAnimationFrame(drawCompareChart));
 
-  } else if(currentTab===2){
+  } else if(currentTab===3){
     // 共享钓点
     let spots=FISHING_SPOTS[currentCity]||[];
     const userSpots=getUserSpots().filter(s=>s.addr&&s.addr.includes(currentCity)||true);
@@ -1265,7 +1381,11 @@ function renderTabContent(result){
     `;
     initAMap(allSpots,nearbySpots);
 
-  } else if(currentTab===3){
+  } else if(currentTab===2){
+    // 一周预测
+    el.innerHTML=renderWeekForecast(wd, currentFish);
+
+  } else if(currentTab===4){
     // 我的
     el.innerHTML=`
       <div style="text-align:center;padding:10px 0 14px;">
@@ -1281,7 +1401,7 @@ function renderTabContent(result){
       </div>
       <div style="font-size:11px;color:#bbb;margin-top:14px;line-height:1.5;text-align:center;">
         数据来源：Open-Meteo 开源天气 API · 高德地图<br>
-        ${wd&&wd._demo?"当前使用模拟数据 · ":""}v5.2 · 共享钓点 · 首页定位 · 图标Tab
+        ${wd&&wd._demo?"当前使用模拟数据 · ":""}v6.2 · 逐小时指数 · 7日预测
       </div>`;
   }
 }
