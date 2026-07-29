@@ -521,6 +521,7 @@ function kmhToBeaufort(kmh){
   if(ms<7.9)return 4;if(ms<10.7)return 5;if(ms<13.8)return 6;if(ms<17.1)return 7;
   return 8;
 }
+function pad(n){return String(n).padStart(2,'0');}
 // ===================================================================
 //  垂钓指数算法 v2.0 — 多因子综合评分
 //  数据源：Open-Meteo (温度/气压/风/湿度/云量/UV/天气代码/小时气压趋势/日温差)
@@ -1109,7 +1110,6 @@ function getWeatherEmoji(code){
 function renderHourlyIndex(wd,fishKey){
   if(!wd||!wd.hourly||!wd.hourly.time||wd.hourly.time.length<2)return"";
   const h=wd.hourly,now=new Date();
-  const pad=n=>String(n).padStart(2,'0');
   const nowISO=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}`;
   // 以当前小时为中心，前2后19（共约22小时）
   let nowIdx=0;for(let i=0;i<h.time.length;i++){if(h.time[i].slice(0,13)>=nowISO){nowIdx=i;break;}}
