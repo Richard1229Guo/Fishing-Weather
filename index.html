@@ -287,26 +287,160 @@ function addCustomLocationDialog(){
   const clList=cl.length?`<div style="margin-bottom:10px;">${cl.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:0.5px solid rgba(0,0,0,0.1);border-radius:6px;margin-bottom:4px;"><span style="font-size:12px;">${l.name} <span style="color:#bbb;font-size:10px;">(${l.lat},${l.lon})</span></span><button onclick="deleteCustomLocation('${l.name}')" style="border:none;background:none;color:#F5222D;font-size:14px;cursor:pointer;padding:0 4px;">&times;</button></div>`).join("")}</div>`:"";
   const overlay=document.createElement("div");overlay.className="modal-overlay";overlay.id="customLocModal";
   overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
-  overlay.innerHTML=`<div class="modal-dialog" onclick="event.stopPropagation()">
+  overlay.innerHTML=`<div class="modal-dialog" style="max-height:85vh;overflow-y:auto;" onclick="event.stopPropagation()">
     <div class="modal-title">管理自定义位置</div>
     ${clList}
     <div style="font-size:11px;color:#bbb;text-align:center;margin-bottom:10px;">-- 添加新位置 --</div>
-    <div class="modal-field"><label class="modal-label">位置名称</label><input class="modal-input" id="clName" placeholder="如：千岛湖钓场"></div>
-    <div class="modal-row"><div class="modal-field"><label class="modal-label">纬度</label><input class="modal-input" id="clLat" type="number" step="0.01" placeholder="如：29.61"></div><div class="modal-field"><label class="modal-label">经度</label><input class="modal-input" id="clLon" type="number" step="0.01" placeholder="如：119.04"></div></div>
-    <div style="display:flex;gap:8px;margin-top:4px;"><button onclick="locateForCustom()" style="padding:6px 12px;border:0.5px solid #4A90D9;background:#fff;color:#4A90D9;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">📍 GPS填充坐标</button></div>
-    <div style="font-size:10px;color:#bbb;margin-top:6px;">💡 可在地图上右键获取经纬度，或用GPS自动填充</div>
+    <div class="modal-field"><label class="modal-label" style="margin-bottom:2px;">搜索地点名称</label></div>
+    <div style="display:flex;gap:6px;">
+      <input class="modal-input" id="clSearch" placeholder="输入地点名称搜索，如：千岛湖、密云水库、东湖" style="flex:1;" 
+        onkeydown="if(event.key==='Enter')searchPlace()">
+      <button onclick="searchPlace()" style="padding:10px 14px;background:#4A90D9;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-family:inherit;white-space:nowrap;">🔍 搜索</button>
+    </div>
+    <div id="clSearchResults" style="margin-top:6px;"></div>
+    <div id="clSelected" style="display:none;margin-top:8px;padding:8px 10px;background:#F0F5FF;border-radius:8px;border:0.5px solid #B3D4FF;">
+      <div style="font-size:11px;color:#666;margin-bottom:2px;">已选择位置</div>
+      <div style="font-size:13px;font-weight:500;" id="clSelectedName"></div>
+      <div style="font-size:11px;color:#999;margin-top:2px;">
+        纬度：<span id="clSelectedLat"></span> &nbsp; 经度：<span id="clSelectedLon"></span>
+      </div>
+    </div>
+    <div class="modal-field" style="margin-top:8px;"><label class="modal-label">位置名称</label><input class="modal-input" id="clName" placeholder="给这个位置起个名字"></div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button onclick="locateForCustom()" style="padding:6px 12px;border:0.5px solid #4A90D9;background:#fff;color:#4A90D9;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">📍 GPS填充</button>
+      <button onclick="openMapPicker()" style="padding:6px 12px;border:0.5px solid #4A90D9;background:#fff;color:#4A90D9;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">🗺 地图选点</button>
+    </div>
+    <div style="font-size:10px;color:#bbb;margin-top:6px;">💡 搜索地名即可自动获取坐标，无需手动输入经纬度</div>
     <div class="modal-btns"><button class="modal-btn secondary" onclick="document.getElementById('customLocModal').remove()">取消</button><button class="modal-btn primary" onclick="addCustomLocation()">添加</button></div>
   </div>`;
   document.body.appendChild(overlay);
+  // 聚焦搜索框
+  setTimeout(()=>{const inp=document.getElementById("clSearch");if(inp)inp.focus();},100);
+}
+
+let clSelectedCoord=null; // 当前选中的坐标
+
+async function searchPlace(){
+  const kw=document.getElementById("clSearch").value.trim();
+  if(!kw){alert("请输入搜索关键词");return;}
+  const container=document.getElementById("clSearchResults");
+  container.innerHTML=`<div style="text-align:center;padding:12px;color:#999;">🔍 搜索中...</div>`;
+  try{
+    const AMap=await loadAMap();
+    const ps=new AMap.PlaceSearch({pageSize:8,citylimit:false});
+    // 优先在当前城市附近搜索
+    const coord=getCoord(currentCity);
+    ps.searchNearBy(kw,[coord.lon,coord.lat],500000,false);
+    // 也用citySearch兜底
+    ps.setCity(currentCity);
+    ps.search(kw,function(status,result){
+      if(status==="complete"&&result.poiList&&result.poiList.pois.length){
+        let html="";
+        result.poiList.pois.forEach((p,i)=>{
+          const dist=p.distance?`<span style="color:#bbb;font-size:10px;">${p.distance>=1000?(p.distance/1000).toFixed(1)+"km":p.distance+"m"}</span>`:"";
+          html+=`<div onclick="selectPlaceResult(${p.location.lng},${p.location.lat},'${p.name.replace(/'/g,"\\'")}','${(p.address||'').replace(/'/g,"\\'")}')" style="padding:8px 10px;border-bottom:0.5px solid #f0f0f0;cursor:pointer;display:flex;justify-content:space-between;align-items:center;" onmouseenter="this.style.background='#EEF4FF'" onmouseleave="this.style.background=''">
+            <div><div style="font-size:13px;">${p.name}</div><div style="font-size:10px;color:#999;">${p.address||""}</div></div>
+            ${dist}
+          </div>`;
+        });
+        container.innerHTML=html||`<div style="text-align:center;padding:12px;color:#999;">无结果</div>`;
+        // 如果只有一条结果自动选中
+        if(result.poiList.pois.length===1){
+          const p=result.poiList.pois[0];
+          selectPlaceResult(p.location.lng,p.location.lat,p.name,p.address||"");
+        }
+      }else{
+        container.innerHTML=`<div style="text-align:center;padding:12px;color:#999;">未找到"${kw}"相关地点，换个关键词试试</div>`;
+      }
+    });
+  }catch(e){
+    container.innerHTML=`<div style="text-align:center;padding:12px;color:#F5222D;">搜索失败：${e.message}</div>`;
+  }
+}
+
+function selectPlaceResult(lon,lat,name,address){
+  clSelectedCoord={lon:Math.round(lon*10000)/10000,lat:Math.round(lat*10000)/10000};
+  document.getElementById("clSelectedName").textContent=name+(address?" · "+address:"");
+  document.getElementById("clSelectedLat").textContent=clSelectedCoord.lat;
+  document.getElementById("clSelectedLon").textContent=clSelectedCoord.lon;
+  document.getElementById("clSelected").style.display="block";
+  // 自动填充名称
+  if(!document.getElementById("clName").value) document.getElementById("clName").value=name;
+  // 高亮选中项
+  const items=document.getElementById("clSearchResults").children;
+  for(let i=0;i<items.length;i++) items[i].style.background="";
+  event.currentTarget.style.background="#D6E4FF";
+}
+
+async function openMapPicker(){
+  // 在地图上点击选点
+  const overlay=document.getElementById("customLocModal");
+  overlay.innerHTML=`<div class="modal-dialog" style="width:95vw;max-width:500px;max-height:85vh;" onclick="event.stopPropagation()">
+    <div class="modal-title">在地图上点击选择位置</div>
+    <div id="clPickerMap" style="width:100%;height:280px;border-radius:8px;margin-bottom:8px;border:0.5px solid #ddd;"></div>
+    <div style="font-size:11px;color:#999;margin-bottom:8px;text-align:center;">👆 点击地图上的目标位置</div>
+    <div id="clPickerInfo" style="font-size:11px;color:#666;margin-bottom:8px;text-align:center;">等待点击...</div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmMapPicker()" class="modal-btn primary" style="flex:1;">✅ 确认此位置</button>
+      <button onclick="addCustomLocationDialog();document.getElementById('customLocModal').remove();addCustomLocationDialog();" class="modal-btn secondary" style="flex:1;">↩ 返回</button>
+    </div>
+  </div>`;
+  try{
+    const AMap=await loadAMap();
+    const coord=getCoord(currentCity);
+    const map=new AMap.Map("clPickerMap",{
+      center:[coord.lon,coord.lat],zoom:11,mapStyle:"amap://styles/light",
+      resizeEnable:true
+    });
+    let pickerMarker=null;
+    // 点击地图放置标记
+    map.on("click",function(e){
+      if(pickerMarker) map.remove(pickerMarker);
+      pickerMarker=new AMap.Marker({position:e.lnglat,map:map,animation:"AMAP_ANIMATION_DROP"});
+      document.getElementById("clPickerInfo").innerHTML=`已选择：经度 ${e.lnglat.lng.toFixed(4)}，纬度 ${e.lnglat.lat.toFixed(4)}`;
+      // 反查地址
+      const geocoder=new AMap.Geocoder();
+      geocoder.getAddress(e.lnglat,function(status,result){
+        if(status==="complete"&&result.regeocode){
+          const addr=result.regeocode.formattedAddress||"";
+          document.getElementById("clPickerInfo").innerHTML=`已选择：${addr.slice(0,20)}<br><small style="color:#999;">经度 ${e.lnglat.lng.toFixed(4)}，纬度 ${e.lnglat.lat.toFixed(4)}</small>`;
+          window._pickerAddr=addr;
+        }
+      });
+      window._pickerLngLat={lon:e.lnglat.lng,lat:e.lnglat.lat};
+    });
+  }catch(e){
+    document.getElementById("clPickerMap").innerHTML=`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;">地图加载失败：${e.message}</div>`;
+  }
+}
+
+function confirmMapPicker(){
+  if(!window._pickerLngLat){alert("请先在地图上点击选择位置");return;}
+  clSelectedCoord={lon:Math.round(window._pickerLngLat.lon*10000)/10000,lat:Math.round(window._pickerLngLat.lat*10000)/10000};
+  const addr=window._pickerAddr||`${clSelectedCoord.lat},${clSelectedCoord.lon}`;
+  // 移除地图弹窗，重新打开主对话框
+  document.getElementById("customLocModal").remove();
+  addCustomLocationDialog();
+  // 填充选中的坐标
+  setTimeout(()=>{
+    document.getElementById("clSelectedName").textContent=addr;
+    document.getElementById("clSelectedLat").textContent=clSelectedCoord.lat;
+    document.getElementById("clSelectedLon").textContent=clSelectedCoord.lon;
+    document.getElementById("clSelected").style.display="block";
+    document.getElementById("clName").focus();
+  },200);
 }
 function locateForCustom(){
   const btn=event.target;
   const oldText=btn.textContent;
   btn.textContent="定位中...";btn.disabled=true;
   getDeviceLocation().then(pos=>{
-    document.getElementById("clLat").value=pos.lat.toFixed(4);
-    document.getElementById("clLon").value=pos.lon.toFixed(4);
-    if(!document.getElementById("clName").value) document.getElementById("clName").value="GPS位置";
+    clSelectedCoord={lat:Math.round(pos.lat*10000)/10000,lon:Math.round(pos.lon*10000)/10000};
+    document.getElementById("clSelectedName").textContent="GPS定位位置";
+    document.getElementById("clSelectedLat").textContent=clSelectedCoord.lat;
+    document.getElementById("clSelectedLon").textContent=clSelectedCoord.lon;
+    document.getElementById("clSelected").style.display="block";
+    if(!document.getElementById("clName").value) document.getElementById("clName").value="我的位置";
     btn.textContent="✅ 已填充";
     setTimeout(()=>{btn.textContent=oldText;btn.disabled=false;},2000);
   }).catch(e=>{
@@ -316,17 +450,16 @@ function locateForCustom(){
 }
 function addCustomLocation(){
   const name=document.getElementById("clName").value.trim();
-  const lat=parseFloat(document.getElementById("clLat").value);
-  const lon=parseFloat(document.getElementById("clLon").value);
   if(!name){alert("请输入位置名称");return;}
-  if(isNaN(lat)||lat<-90||lat>90){alert("纬度无效，范围-90到90");return;}
-  if(isNaN(lon)||lon<-180||lon>180){alert("经度无效，范围-180到180");return;}
+  if(!clSelectedCoord||!clSelectedCoord.lat||!clSelectedCoord.lon){alert("请先搜索或选择位置坐标");return;}
+  const lat=clSelectedCoord.lat, lon=clSelectedCoord.lon;
   const cl=loadCustomLocations();
   if(cl.find(l=>l.name===name)){alert("该位置名称已存在");return;}
   if(CITY_COORDS[name]){alert("与内置城市重名，请换个名称");return;}
-  cl.push({name,lat:Math.round(lat*10000)/10000,lon:Math.round(lon*10000)/10000});
+  cl.push({name,lat,lon});
   saveCustomLocations(cl);
   document.getElementById("customLocModal").remove();
+  clSelectedCoord=null;
   currentCity=name; loadWeather();
 }
 function deleteCustomLocation(name){
@@ -509,7 +642,7 @@ function loadAMap(){
     window._amapCallback=function(){amapReady=true;resolve(window.AMap);};
     const script=document.createElement("script");
     script.id="amap-script";
-    script.src=`https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&callback=_amapCallback&plugin=AMap.Geocoder,AMap.AdvancedInfoWindow`;
+    script.src=`https://webapi.amap.com/maps?v=2.0&key=${AMAP_KEY}&callback=_amapCallback&plugin=AMap.Geocoder,AMap.AdvancedInfoWindow,AMap.PlaceSearch`;
     script.onerror=()=>reject(new Error("高德地图脚本加载失败"));
     document.head.appendChild(script);
   });
