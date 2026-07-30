@@ -268,6 +268,85 @@ const CITY_COORDS = {
   "南京":{lat:32.06,lon:118.78},"长沙":{lat:28.23,lon:112.94},"重庆":{lat:29.56,lon:106.55},
   "西安":{lat:34.34,lon:108.94},
 };
+// 自定义位置（localStorage）
+function loadCustomLocations(){
+  try{ return JSON.parse(localStorage.getItem("fishApp_customLocations")||"[]"); }
+  catch{ return []; }
+}
+function saveCustomLocations(arr){ localStorage.setItem("fishApp_customLocations",JSON.stringify(arr)); }
+// 统一坐标查询：优先内置城市，其次自定义位置
+function getCoord(city){
+  if(CITY_COORDS[city]) return CITY_COORDS[city];
+  const cl=loadCustomLocations();
+  const found=cl.find(l=>l.name===city);
+  return found?{lat:found.lat,lon:found.lon}:CITY_COORDS["杭州"];
+}
+function isCustomLocation(name){ return !CITY_COORDS[name]; }
+function addCustomLocationDialog(){
+  const cl=loadCustomLocations();
+  const clList=cl.length?`<div style="margin-bottom:10px;">${cl.map(l=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:0.5px solid rgba(0,0,0,0.1);border-radius:6px;margin-bottom:4px;"><span style="font-size:12px;">${l.name} <span style="color:#bbb;font-size:10px;">(${l.lat},${l.lon})</span></span><button onclick="deleteCustomLocation('${l.name}')" style="border:none;background:none;color:#F5222D;font-size:14px;cursor:pointer;padding:0 4px;">&times;</button></div>`).join("")}</div>`:"";
+  const overlay=document.createElement("div");overlay.className="modal-overlay";overlay.id="customLocModal";
+  overlay.onclick=function(e){if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal-dialog" onclick="event.stopPropagation()">
+    <div class="modal-title">管理自定义位置</div>
+    ${clList}
+    <div style="font-size:11px;color:#bbb;text-align:center;margin-bottom:10px;">-- 添加新位置 --</div>
+    <div class="modal-field"><label class="modal-label">位置名称</label><input class="modal-input" id="clName" placeholder="如：千岛湖钓场"></div>
+    <div class="modal-row"><div class="modal-field"><label class="modal-label">纬度</label><input class="modal-input" id="clLat" type="number" step="0.01" placeholder="如：29.61"></div><div class="modal-field"><label class="modal-label">经度</label><input class="modal-input" id="clLon" type="number" step="0.01" placeholder="如：119.04"></div></div>
+    <div style="display:flex;gap:8px;margin-top:4px;"><button onclick="locateForCustom()" style="padding:6px 12px;border:0.5px solid #4A90D9;background:#fff;color:#4A90D9;border-radius:8px;font-size:12px;cursor:pointer;font-family:inherit;">📍 GPS填充坐标</button></div>
+    <div style="font-size:10px;color:#bbb;margin-top:6px;">💡 可在地图上右键获取经纬度，或用GPS自动填充</div>
+    <div class="modal-btns"><button class="modal-btn secondary" onclick="document.getElementById('customLocModal').remove()">取消</button><button class="modal-btn primary" onclick="addCustomLocation()">添加</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+function locateForCustom(){
+  const btn=event.target;
+  const oldText=btn.textContent;
+  btn.textContent="定位中...";btn.disabled=true;
+  getDeviceLocation().then(pos=>{
+    document.getElementById("clLat").value=pos.lat.toFixed(4);
+    document.getElementById("clLon").value=pos.lon.toFixed(4);
+    if(!document.getElementById("clName").value) document.getElementById("clName").value="GPS位置";
+    btn.textContent="✅ 已填充";
+    setTimeout(()=>{btn.textContent=oldText;btn.disabled=false;},2000);
+  }).catch(e=>{
+    btn.textContent=oldText;btn.disabled=false;
+    alert("定位失败："+e.message);
+  });
+}
+function addCustomLocation(){
+  const name=document.getElementById("clName").value.trim();
+  const lat=parseFloat(document.getElementById("clLat").value);
+  const lon=parseFloat(document.getElementById("clLon").value);
+  if(!name){alert("请输入位置名称");return;}
+  if(isNaN(lat)||lat<-90||lat>90){alert("纬度无效，范围-90到90");return;}
+  if(isNaN(lon)||lon<-180||lon>180){alert("经度无效，范围-180到180");return;}
+  const cl=loadCustomLocations();
+  if(cl.find(l=>l.name===name)){alert("该位置名称已存在");return;}
+  if(CITY_COORDS[name]){alert("与内置城市重名，请换个名称");return;}
+  cl.push({name,lat:Math.round(lat*10000)/10000,lon:Math.round(lon*10000)/10000});
+  saveCustomLocations(cl);
+  document.getElementById("customLocModal").remove();
+  currentCity=name; loadWeather();
+}
+function deleteCustomLocation(name){
+  if(!confirm("确定删除自定义位置「"+name+"」？"))return;
+  const cl=loadCustomLocations().filter(l=>l.name!==name);
+  saveCustomLocations(cl);
+  if(currentCity===name) currentCity="杭州";
+  loadWeather();
+}
+function saveCurrentGPSLocation(){
+  if(!userLocation){alert("无法获取当前位置");return;}
+  const name=prompt("请为当前位置命名：","GPS位置"+loadCustomLocations().length);
+  if(!name)return;
+  const cl=loadCustomLocations();
+  if(cl.find(l=>l.name===name)){alert("该名称已存在");return;}
+  if(CITY_COORDS[name]){alert("与内置城市重名");return;}
+  cl.push({name,lat:Math.round(userLocation.lat*10000)/10000,lon:Math.round(userLocation.lon*10000)/10000});
+  saveCustomLocations(cl);
+  alert("已保存「"+name+"」");
+}
 
 // ===================================================================
 //  钓点数据库（增强版：必填字段 + 评论）
@@ -732,7 +811,7 @@ function calcIndex(fishKey,wd){
 //  天气 API 调用
 // ===================================================================
 async function fetchWeather(city,lat,lon){
-  const coord=(lat!=null&&lon!=null)?{lat,lon}:(CITY_COORDS[city]||CITY_COORDS["杭州"]);
+  const coord=(lat!=null&&lon!=null)?{lat,lon}:getCoord(city);
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${coord.lat}&longitude=${coord.lon}`+
     `&current=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code,uv_index,wind_gusts_10m`+
     `&hourly=temperature_2m,pressure_msl,relative_humidity_2m,wind_speed_10m,precipitation_probability,cloud_cover,weather_code,uv_index`+
@@ -1052,11 +1131,16 @@ function render(){
         <div class="location-row">
           ${usingGPS
             ? `<div class="header-city" style="display:flex;align-items:center;gap:4px;"><span style="font-size:14px;">📍</span><span>我的位置</span></div>
+               <button class="header-btn" onclick="saveCurrentGPSLocation()" style="font-size:11px;padding:2px 6px;" title="保存当前位置">📌保存</button>
                <button class="header-btn" onclick="clearGPS()" style="font-size:11px;padding:2px 8px;">取消</button>`
             : `<button class="header-btn" id="gpsBtn" onclick="locateOnHome()" style="font-size:13px;padding:3px 8px;" title="获取当前位置">📍</button>
                <select class="location-select" onchange="changeCity(this.value)">
+                 <optgroup label="内置城市">
                  ${Object.keys(CITY_COORDS).map(c=>`<option ${c===currentCity?"selected":""}>${c}</option>`).join("")}
-               </select>`
+                 </optgroup>
+                 ${loadCustomLocations().length?`<optgroup label="自定义位置">${loadCustomLocations().map(l=>`<option ${l.name===currentCity?"selected":""}>${l.name}</option>`).join("")}</optgroup>`:""}
+               </select>
+               <button class="header-btn" onclick="addCustomLocationDialog()" style="font-size:13px;padding:3px 6px;" title="管理自定义位置">＋</button>`
           }
           <div style="font-size:11px;opacity:0.7;margin-left:4px;">${weatherDesc}</div>
         </div>
@@ -1325,7 +1409,7 @@ function renderTabContent(result){
     const userSpots=getUserSpots().filter(s=>s.addr&&s.addr.includes(currentCity)||true);
     // 合并系统钓点 + 用户钓点（同城）
     const userSpotsCity=getUserSpots().filter(s=>{
-      const coord=CITY_COORDS[currentCity];
+      const coord=getCoord(currentCity);
       if(!coord)return false;
       const dist=haversine(coord.lat,coord.lon,s.lat,s.lon);
       return dist<80; // 80km 范围内
@@ -1415,7 +1499,7 @@ async function initAMap(spots,nearbySpots){
   if(!container)return;
   try{
     const AMap=await loadAMap();container.innerHTML="";
-    const coord=userLocation||CITY_COORDS[currentCity];
+    const coord=userLocation||getCoord(currentCity);
     const map=new AMap.Map(container,{
       zoom:userLocation?12:(currentCity==="杭州"?10:currentCity==="武汉"?10:11),
       center:userLocation?[userLocation.lon,userLocation.lat]:[coord.lon,coord.lat],
@@ -1496,7 +1580,7 @@ function navigateToSpot(lat,lon,name){
 // ===================================================================
 function selectFish(k){currentFish=k;render();}
 function switchTab(i){currentTab=i;render();}
-function changeCity(c){currentCity=c;loadWeather();}
+function changeCity(c){currentCity=c;usingGPS=false;userLocation=null;usingNearby=false;loadWeather();}
 function toggleNotif(i){notifications[i].on=!notifications[i].on;render();}
 
 // ===================================================================
